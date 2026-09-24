@@ -1,0 +1,16 @@
+{
+  "name": "escape-the-matrix",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && npm install --prefix apps/backend && npm install --prefix apps/frontend",
+    "dev": "concurrently -n \"backend,frontend\" -c \"magenta,cyan\" \"npm run dev --prefix apps/backend\" \"npm run dev --prefix apps/frontend\"",
+    "dev:backend": "npm run dev --prefix apps/backend",
+    "dev:frontend": "npm run dev --prefix apps/frontend",
+    "build": "npm run build --prefix apps/backend && npm run build --prefix apps/frontend",
+    "start": "npm run start --prefix apps/backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "./dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@escape-the-matrix/shared-types": ["../../packages/shared-types/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "../../packages/shared-types/src/**/*"]
+}
