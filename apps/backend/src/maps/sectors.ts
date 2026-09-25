@@ -5,7 +5,8 @@ import {
   SecurityGate, 
   DataTerminal, 
   PassPickup, 
-  Position 
+  Position,
+  SectorSideScrollerLayout 
 } from '@escape-the-matrix/shared-types';
 
 function createEmptyGrid(size: number): TileType[][] {
@@ -21,522 +22,623 @@ function createEmptyGrid(size: number): TileType[][] {
 }
 
 export const SECTOR_DEFINITIONS: Record<number, SectorDefinitionEntity> = {
+  // =========================================================================
+  // SECTOR 01: Sub-Grid Slums (Rainy Neon Alleyways & Fire Escapes)
+  // =========================================================================
   1: (() => {
-    const size = 8;
+    const size = 26;
     const grid = createEmptyGrid(size);
 
-    // Build alley walls
-    grid[2][1] = 'WALL';
-    grid[2][2] = 'WALL';
-    grid[2][3] = 'WALL';
-    grid[2][4] = 'WALL';
-    grid[5][3] = 'WALL';
-    grid[5][4] = 'WALL';
-    grid[5][5] = 'WALL';
-    grid[5][6] = 'WALL';
-    grid[3][6] = 'LOW_COVER';
-    grid[4][1] = 'LOW_COVER';
+    const layout: SectorSideScrollerLayout = {
+      widthUnits: 26,
+      theme: 'SLUMS',
+      weather: 'RAIN',
+      description: 'Rain-slicked neon back-alleys with steam vents, fire escape scaffolding, and low puddle-scanning drones.',
+      rooftopStart: 4,
+      rooftopEnd: 14,
+      alleyStart: 13,
+      alleyEnd: 22,
+      ladders: [
+        { id: 'fire-escape-ladder-1', x: 5, topBand: 'ROOFTOP', bottomBand: 'STREET' }
+      ],
+      ramps: [
+        { id: 'sub-alley-ramp-down', startX: 13, endX: 15, direction: 'DOWN_TO_ALLEY' },
+        { id: 'sub-alley-ramp-up', startX: 20, endX: 22, direction: 'UP_TO_STREET' }
+      ],
+      gaps: [
+        { id: 'flooded-trench-gap', startX: 8, endX: 11, band: 'STREET' }
+      ],
+      clutter: [
+        { id: 'slum-dumpster-1', x: 3, band: 'STREET', type: 'DUMPSTER' },
+        { id: 'scaffold-crate-2', x: 8, band: 'ROOFTOP', type: 'CRATE' },
+        { id: 'sub-alley-barrel-3', x: 17, band: 'ALLEY', type: 'BARRELS' }
+      ],
+      features: [
+        { id: 'steam-vent-1', type: 'STEAM_VENT', x: 7, y: 1, band: 'STREET', state: 'ACTIVE' },
+        { id: 'steam-vent-2', type: 'STEAM_VENT', x: 19, y: 2, band: 'ALLEY', state: 'ACTIVE' }
+      ]
+    };
 
     const enemies: EnemyNPC[] = [
       {
-        id: 'drone-01',
+        id: 'puddle-recon-drone',
         type: 'DRONE',
-        x: 4,
-        y: 2,
+        x: 9.5,
+        y: 1,
+        band: 'STREET',
         direction: 'RIGHT',
+        facing: 'RIGHT',
         state: 'PATROL',
-        visionRange: 3,
-        visionAngle: 90,
+        minX: 8.5,
+        maxX: 11.5,
+        visionRange: 3.5,
+        visionAngle: 75,
         stunTurns: 0,
-        patrolPath: [
-          { x: 4, y: 2 },
-          { x: 4, y: 3 },
-          { x: 4, y: 4 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
-      },
+      }
     ];
 
     const gates: SecurityGate[] = [];
     const terminals: DataTerminal[] = [
       {
-        id: 'term-1-1',
-        x: 1,
-        y: 6,
+        id: 'slum-data-tap',
+        x: 18,
+        y: 2,
+        band: 'ALLEY',
         isHacked: false,
         hackProgress: 0,
-        energyReward: 25,
-        dataPointsReward: 50,
-      },
+        energyReward: 30,
+        dataPointsReward: 60,
+      }
     ];
     const passPickups: PassPickup[] = [];
 
     return {
       sectorId: 1,
-      name: 'Sub-Grid Slums',
+      name: 'Sub-Grid Slums (Rain Alleys)',
       gridSize: size,
       timeLimit: 60,
-      basePoints: 100,
+      basePoints: 120,
       tileMapJson: grid,
+      layoutJson: layout,
       enemySpawnsJson: enemies,
       gatesJson: gates,
       terminalsJson: terminals,
       passPickupsJson: passPickups,
-      extractionPointJson: { x: 7, y: 7 },
-      jevSpawnJson: { x: 0, y: 0 },
+      extractionPointJson: { x: 25, y: 1 },
+      jevSpawnJson: { x: 0.5, y: 1 },
     };
   })(),
 
+  // =========================================================================
+  // SECTOR 02: Downtown Sky-Bridge Plaza (Corporate Checkpoints)
+  // =========================================================================
   2: (() => {
-    const size = 10;
+    const size = 28;
     const grid = createEmptyGrid(size);
 
-    // Downtown perimeter walls
-    for (let x = 2; x <= 7; x++) grid[4][x] = 'WALL';
-    grid[4][5] = 'SECURITY_GATE'; // Alpha security gate
+    const layout: SectorSideScrollerLayout = {
+      widthUnits: 28,
+      theme: 'SKY_BRIDGE',
+      weather: 'HAZE',
+      description: 'High-altitude corporate glass towers. Upper Sky-Bridge bypass vs. lower transit tunnel with laser checkpoint.',
+      rooftopStart: 4,
+      rooftopEnd: 17,
+      alleyStart: 16,
+      alleyEnd: 24,
+      ladders: [
+        { id: 'skybridge-ascent-1', x: 5, topBand: 'ROOFTOP', bottomBand: 'STREET' },
+        { id: 'skybridge-descent-2', x: 16, topBand: 'ROOFTOP', bottomBand: 'STREET' }
+      ],
+      ramps: [
+        { id: 'metro-ramp-down', startX: 16, endX: 18, direction: 'DOWN_TO_ALLEY' },
+        { id: 'metro-ramp-up', startX: 23, endX: 25, direction: 'UP_TO_STREET' }
+      ],
+      gaps: [
+        { id: 'atrium-skylight-gap', startX: 9, endX: 12, band: 'STREET' }
+      ],
+      clutter: [
+        { id: 'plaza-bench-1', x: 2, band: 'STREET', type: 'CRATE' },
+        { id: 'executive-planter-2', x: 9, band: 'ROOFTOP', type: 'BARRELS' },
+        { id: 'maintenance-crate-3', x: 20, band: 'ALLEY', type: 'CRATE' }
+      ],
+      features: [
+        { id: 'corporate-hologram-1', type: 'HOLOGRAM', x: 11, y: 0, band: 'ROOFTOP', state: 'ACTIVE' },
+        { id: 'security-camera-1', type: 'SECURITY_CAMERA', x: 14, y: 1, band: 'STREET', state: 'ACTIVE' }
+      ]
+    };
 
-    grid[7][2] = 'WALL';
-    grid[7][3] = 'WALL';
-    grid[7][7] = 'WALL';
-    grid[7][8] = 'WALL';
-
-    grid[2][5] = 'LOW_COVER';
-    grid[6][2] = 'LOW_COVER';
+    const enemies: EnemyNPC[] = [
+      {
+        id: 'skybridge-enforcer',
+        type: 'POLICE',
+        x: 11,
+        y: 0,
+        band: 'ROOFTOP',
+        direction: 'RIGHT',
+        facing: 'RIGHT',
+        minX: 7,
+        maxX: 15,
+        state: 'PATROL',
+        visionRange: 4.5,
+        visionAngle: 60,
+        stunTurns: 0,
+      },
+      {
+        id: 'plaza-ground-guard',
+        type: 'POLICE',
+        x: 19,
+        y: 1,
+        band: 'STREET',
+        direction: 'LEFT',
+        facing: 'LEFT',
+        minX: 17,
+        maxX: 22,
+        state: 'PATROL',
+        visionRange: 4,
+        visionAngle: 60,
+        stunTurns: 0,
+      }
+    ];
 
     const gates: SecurityGate[] = [
       {
-        id: 'gate-2-alpha',
-        x: 5,
-        y: 4,
+        id: 'laser-checkpoint-alpha',
+        x: 14,
+        y: 1,
+        band: 'STREET',
         requiredPass: 'ALPHA_PASS',
         isUnlocked: false,
-      },
+      }
     ];
 
     const passPickups: PassPickup[] = [
       {
-        id: 'pass-2-alpha',
-        x: 1,
-        y: 8,
+        id: 'alpha-security-card',
+        x: 8,
+        y: 0,
+        band: 'ROOFTOP',
         passType: 'ALPHA_PASS',
         collected: false,
-      },
-    ];
-
-    const enemies: EnemyNPC[] = [
-      {
-        id: 'police-2-1',
-        type: 'POLICE',
-        x: 2,
-        y: 2,
-        direction: 'DOWN',
-        state: 'PATROL',
-        visionRange: 4,
-        visionAngle: 90,
-        stunTurns: 0,
-        patrolPath: [
-          { x: 2, y: 2 },
-          { x: 5, y: 2 },
-          { x: 8, y: 2 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
-      },
-      {
-        id: 'police-2-2',
-        type: 'POLICE',
-        x: 7,
-        y: 6,
-        direction: 'LEFT',
-        state: 'PATROL',
-        visionRange: 4,
-        visionAngle: 90,
-        stunTurns: 0,
-        patrolPath: [
-          { x: 7, y: 6 },
-          { x: 7, y: 8 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
-      },
+      }
     ];
 
     const terminals: DataTerminal[] = [
       {
-        id: 'term-2-1',
-        x: 8,
-        y: 1,
+        id: 'financial-ledger-node',
+        x: 21,
+        y: 2,
+        band: 'ALLEY',
         isHacked: false,
         hackProgress: 0,
-        energyReward: 30,
-        dataPointsReward: 75,
-      },
+        energyReward: 35,
+        dataPointsReward: 90,
+      }
     ];
 
     return {
       sectorId: 2,
-      name: 'Downtown Financial Plaza',
+      name: 'Downtown Sky-Bridge Plaza',
       gridSize: size,
       timeLimit: 50,
-      basePoints: 150,
+      basePoints: 220,
       tileMapJson: grid,
+      layoutJson: layout,
       enemySpawnsJson: enemies,
       gatesJson: gates,
       terminalsJson: terminals,
       passPickupsJson: passPickups,
-      extractionPointJson: { x: 9, y: 9 },
-      jevSpawnJson: { x: 0, y: 0 },
+      extractionPointJson: { x: 27, y: 1 },
+      jevSpawnJson: { x: 0.5, y: 1 },
     };
   })(),
 
+  // =========================================================================
+  // SECTOR 03: High-Riot Mag-Rail Expressway (Fast Traffic & Aerial Drones)
+  // =========================================================================
   3: (() => {
-    const size = 12;
+    const size = 30;
     const grid = createEmptyGrid(size);
 
-    // Highway lanes & corrupted grid tiles
-    grid[3][3] = 'CORRUPTED_GRID';
-    grid[3][4] = 'CORRUPTED_GRID';
-    grid[3][5] = 'CORRUPTED_GRID';
-    grid[6][7] = 'CORRUPTED_GRID';
-    grid[6][8] = 'CORRUPTED_GRID';
-    grid[7][7] = 'CORRUPTED_GRID';
-
-    // Highway barriers
-    for (let y = 1; y <= 5; y++) grid[y][6] = 'WALL';
-    for (let y = 7; y <= 10; y++) grid[y][6] = 'WALL';
-
-    grid[4][2] = 'LOW_COVER';
-    grid[8][9] = 'LOW_COVER';
+    const layout: SectorSideScrollerLayout = {
+      widthUnits: 30,
+      theme: 'HIGHWAY',
+      weather: 'NONE',
+      description: 'Multi-lane cyber expressway. Moving autonomous hover-cars roar across highway gaps; container hop routes.',
+      rooftopStart: 3,
+      rooftopEnd: 19,
+      alleyStart: 18,
+      alleyEnd: 27,
+      ladders: [
+        { id: 'gantry-ladder-1', x: 4, topBand: 'ROOFTOP', bottomBand: 'STREET' },
+        { id: 'gantry-ladder-2', x: 18, topBand: 'ROOFTOP', bottomBand: 'STREET' }
+      ],
+      ramps: [
+        { id: 'undercarriage-ramp-down', startX: 19, endX: 21, direction: 'DOWN_TO_ALLEY' },
+        { id: 'undercarriage-ramp-up', startX: 25, endX: 27, direction: 'UP_TO_STREET' }
+      ],
+      gaps: [
+        { id: 'highway-lane-gap-1', startX: 7, endX: 11, band: 'STREET', isMovingTraffic: true },
+        { id: 'highway-lane-gap-2', startX: 14, endX: 17, band: 'STREET', isMovingTraffic: true }
+      ],
+      clutter: [
+        { id: 'cargo-container-1', x: 2, band: 'STREET', type: 'CRATE' },
+        { id: 'gantry-relay-box', x: 11, band: 'ROOFTOP', type: 'BARRELS' },
+        { id: 'underpass-drain-pipe', x: 23, band: 'ALLEY', type: 'CRATE' }
+      ]
+    };
 
     const enemies: EnemyNPC[] = [
       {
-        id: 'drone-3-1',
+        id: 'highway-patrol-drone-1',
         type: 'DRONE',
-        x: 4,
+        x: 9,
         y: 1,
-        direction: 'DOWN',
-        state: 'PATROL',
-        visionRange: 4,
-        visionAngle: 90,
-        stunTurns: 0,
-        patrolPath: [
-          { x: 4, y: 1 },
-          { x: 4, y: 5 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
-      },
-      {
-        id: 'drone-3-2',
-        type: 'DRONE',
-        x: 8,
-        y: 8,
+        band: 'STREET',
         direction: 'RIGHT',
+        facing: 'RIGHT',
+        minX: 7,
+        maxX: 11,
         state: 'PATROL',
         visionRange: 4,
-        visionAngle: 90,
+        visionAngle: 80,
         stunTurns: 0,
-        patrolPath: [
-          { x: 8, y: 8 },
-          { x: 10, y: 8 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
       },
       {
-        id: 'police-3-1',
-        type: 'POLICE',
-        x: 7,
-        y: 4,
+        id: 'highway-patrol-drone-2',
+        type: 'DRONE',
+        x: 15.5,
+        y: 1,
+        band: 'STREET',
         direction: 'LEFT',
+        facing: 'LEFT',
+        minX: 14,
+        maxX: 17.5,
         state: 'PATROL',
         visionRange: 4,
-        visionAngle: 90,
+        visionAngle: 80,
         stunTurns: 0,
-        patrolPath: [
-          { x: 7, y: 4 },
-          { x: 10, y: 4 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
       },
+      {
+        id: 'overpass-highway-patrol',
+        type: 'POLICE',
+        x: 12,
+        y: 0,
+        band: 'ROOFTOP',
+        direction: 'RIGHT',
+        facing: 'RIGHT',
+        minX: 7,
+        maxX: 16,
+        state: 'PATROL',
+        visionRange: 4.5,
+        visionAngle: 60,
+        stunTurns: 0,
+      }
     ];
 
+    const gates: SecurityGate[] = [];
     const terminals: DataTerminal[] = [
       {
-        id: 'term-3-1',
-        x: 2,
-        y: 8,
+        id: 'traffic-control-hub',
+        x: 13,
+        y: 0,
+        band: 'ROOFTOP',
         isHacked: false,
         hackProgress: 0,
-        energyReward: 35,
+        energyReward: 40,
         dataPointsReward: 100,
       },
       {
-        id: 'term-3-2',
-        x: 10,
+        id: 'sub-highway-grid-node',
+        x: 22,
         y: 2,
+        band: 'ALLEY',
         isHacked: false,
         hackProgress: 0,
-        energyReward: 35,
+        energyReward: 40,
         dataPointsReward: 100,
-      },
+      }
     ];
+    const passPickups: PassPickup[] = [];
 
     return {
       sectorId: 3,
       name: 'High-Riot Cyber Highway',
       gridSize: size,
       timeLimit: 45,
-      basePoints: 200,
+      basePoints: 320,
       tileMapJson: grid,
+      layoutJson: layout,
       enemySpawnsJson: enemies,
-      gatesJson: [],
+      gatesJson: gates,
       terminalsJson: terminals,
-      passPickupsJson: [],
-      extractionPointJson: { x: 11, y: 11 },
-      jevSpawnJson: { x: 0, y: 0 },
+      passPickupsJson: passPickups,
+      extractionPointJson: { x: 29, y: 1 },
+      jevSpawnJson: { x: 0.5, y: 1 },
     };
   })(),
 
+  // =========================================================================
+  // SECTOR 04: Neuro-Corp Executive Vaults (Interior Stealth & Air Ducts)
+  // =========================================================================
   4: (() => {
-    const size = 14;
+    const size = 30;
     const grid = createEmptyGrid(size);
 
-    // Corporate Core walls & Turrets
-    for (let x = 3; x <= 10; x++) grid[5][x] = 'WALL';
-    grid[5][7] = 'SECURITY_GATE'; // Beta Gate
-    for (let x = 4; x <= 11; x++) grid[9][x] = 'WALL';
+    const layout: SectorSideScrollerLayout = {
+      widthUnits: 30,
+      theme: 'OFFICE_VAULT',
+      weather: 'NONE',
+      description: 'Corporate executive offices and server bank. Automated ceiling turrets, executive desk cover, and air-duct bypasses.',
+      rooftopStart: 3,
+      rooftopEnd: 16,
+      alleyStart: 15,
+      alleyEnd: 27,
+      ladders: [
+        { id: 'vent-shaft-ascent', x: 4, topBand: 'ROOFTOP', bottomBand: 'STREET' },
+        { id: 'vent-shaft-descent', x: 15, topBand: 'ROOFTOP', bottomBand: 'STREET' }
+      ],
+      ramps: [
+        { id: 'sub-basement-ramp-down', startX: 16, endX: 18, direction: 'DOWN_TO_ALLEY' },
+        { id: 'sub-basement-ramp-up', startX: 25, endX: 27, direction: 'UP_TO_STREET' }
+      ],
+      gaps: [
+        { id: 'server-cooling-pit', startX: 9, endX: 12, band: 'STREET' }
+      ],
+      clutter: [
+        { id: 'exec-desk-1', x: 2, band: 'STREET', type: 'DESK' },
+        { id: 'server-rack-vault-1', x: 7, band: 'ROOFTOP', type: 'SERVER_RACK' },
+        { id: 'server-rack-vault-2', x: 20, band: 'ALLEY', type: 'SERVER_RACK' }
+      ],
+      features: [
+        { id: 'air-duct-bypass-1', type: 'AIR_DUCT', x: 10, y: 0, band: 'ROOFTOP', state: 'ACTIVE' }
+      ]
+    };
 
-    grid[3][4] = 'LOW_COVER';
-    grid[7][11] = 'LOW_COVER';
-    grid[11][4] = 'LOW_COVER';
+    const enemies: EnemyNPC[] = [
+      {
+        id: 'vault-ceiling-turret',
+        type: 'TURRET',
+        x: 18,
+        y: 2,
+        band: 'ALLEY',
+        direction: 'DOWN',
+        facing: 'RIGHT',
+        turretAngle: -25,
+        turretSweepDir: 1,
+        state: 'PATROL',
+        visionRange: 6.5,
+        visionAngle: 45,
+        stunTurns: 0,
+      },
+      {
+        id: 'neuro-executive-guard',
+        type: 'POLICE',
+        x: 10,
+        y: 0,
+        band: 'ROOFTOP',
+        direction: 'LEFT',
+        facing: 'LEFT',
+        minX: 6,
+        maxX: 14,
+        state: 'PATROL',
+        visionRange: 4.5,
+        visionAngle: 60,
+        stunTurns: 0,
+      },
+      {
+        id: 'office-patrol-drone',
+        type: 'DRONE',
+        x: 23,
+        y: 1,
+        band: 'STREET',
+        direction: 'RIGHT',
+        facing: 'RIGHT',
+        minX: 20,
+        maxX: 26,
+        state: 'PATROL',
+        visionRange: 3.5,
+        visionAngle: 75,
+        stunTurns: 0,
+      }
+    ];
 
     const gates: SecurityGate[] = [
       {
-        id: 'gate-4-beta',
-        x: 7,
-        y: 5,
+        id: 'vault-laser-barrier-beta',
+        x: 14,
+        y: 1,
+        band: 'STREET',
         requiredPass: 'BETA_PASS',
         isUnlocked: false,
-      },
+      }
     ];
 
     const passPickups: PassPickup[] = [
       {
-        id: 'pass-4-beta',
-        x: 2,
-        y: 11,
+        id: 'beta-vault-keycard',
+        x: 11,
+        y: 0,
+        band: 'ROOFTOP',
         passType: 'BETA_PASS',
         collected: false,
-      },
-    ];
-
-    const enemies: EnemyNPC[] = [
-      {
-        id: 'turret-4-1',
-        type: 'TURRET',
-        x: 4,
-        y: 3,
-        direction: 'RIGHT',
-        state: 'PATROL',
-        visionRange: 5,
-        visionAngle: 90,
-        stunTurns: 0,
-      },
-      {
-        id: 'turret-4-2',
-        type: 'TURRET',
-        x: 10,
-        y: 11,
-        direction: 'UP',
-        state: 'PATROL',
-        visionRange: 5,
-        visionAngle: 90,
-        stunTurns: 0,
-      },
-      {
-        id: 'police-4-1',
-        type: 'POLICE',
-        x: 2,
-        y: 7,
-        direction: 'DOWN',
-        state: 'PATROL',
-        visionRange: 4,
-        visionAngle: 90,
-        stunTurns: 0,
-        patrolPath: [
-          { x: 2, y: 7 },
-          { x: 5, y: 7 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
-      },
+      }
     ];
 
     const terminals: DataTerminal[] = [
       {
-        id: 'term-4-1',
-        x: 11,
+        id: 'master-server-terminal',
+        x: 23,
         y: 2,
+        band: 'ALLEY',
         isHacked: false,
         hackProgress: 0,
-        energyReward: 40,
-        dataPointsReward: 150,
-      },
+        energyReward: 45,
+        dataPointsReward: 120,
+      }
     ];
 
     return {
       sectorId: 4,
-      name: 'Corporate Central Core',
+      name: 'Neuro-Corp Executive Vaults',
       gridSize: size,
       timeLimit: 40,
-      basePoints: 250,
+      basePoints: 420,
       tileMapJson: grid,
+      layoutJson: layout,
       enemySpawnsJson: enemies,
       gatesJson: gates,
       terminalsJson: terminals,
       passPickupsJson: passPickups,
-      extractionPointJson: { x: 13, y: 13 },
-      jevSpawnJson: { x: 0, y: 0 },
+      extractionPointJson: { x: 29, y: 1 },
+      jevSpawnJson: { x: 0.5, y: 1 },
     };
   })(),
 
+  // =========================================================================
+  // SECTOR 05: The Citadel Glitch (Matrix Reality Breakdown)
+  // =========================================================================
   5: (() => {
-    const size = 16;
+    const size = 32;
     const grid = createEmptyGrid(size);
 
-    // Citadel inner sanctum
-    for (let x = 5; x <= 12; x++) {
-      grid[4][x] = 'WALL';
-      grid[11][x] = 'WALL';
-    }
-    for (let y = 5; y <= 10; y++) {
-      grid[y][5] = 'WALL';
-      grid[y][12] = 'WALL';
-    }
+    const layout: SectorSideScrollerLayout = {
+      widthUnits: 32,
+      theme: 'CITADEL_GLITCH',
+      weather: 'CODE_RAIN',
+      description: 'Reality breakdown at the Matrix core. Dissolving floating digital blocks, relentless Agent Hunter pursuit, and Extraction Glitch.',
+      rooftopStart: 3,
+      rooftopEnd: 19,
+      alleyStart: 18,
+      alleyEnd: 29,
+      ladders: [
+        { id: 'glitch-beam-ascent', x: 4, topBand: 'ROOFTOP', bottomBand: 'STREET' },
+        { id: 'glitch-beam-descent', x: 18, topBand: 'ROOFTOP', bottomBand: 'STREET' }
+      ],
+      ramps: [
+        { id: 'code-void-ramp-down', startX: 19, endX: 21, direction: 'DOWN_TO_ALLEY' },
+        { id: 'code-void-ramp-up', startX: 27, endX: 29, direction: 'UP_TO_STREET' }
+      ],
+      gaps: [
+        { id: 'dissolved-code-void-1', startX: 8, endX: 11, band: 'STREET' },
+        { id: 'dissolved-code-void-2', startX: 14, endX: 17, band: 'STREET' }
+      ],
+      clutter: [
+        { id: 'matrix-data-cube-1', x: 2, band: 'STREET', type: 'CRATE' },
+        { id: 'matrix-data-cube-2', x: 10, band: 'ROOFTOP', type: 'BARRELS' },
+        { id: 'matrix-data-cube-3', x: 24, band: 'ALLEY', type: 'CRATE' }
+      ]
+    };
 
-    grid[11][8] = 'SECURITY_GATE'; // Master Gate
-    grid[7][7] = 'CORRUPTED_GRID';
-    grid[7][9] = 'CORRUPTED_GRID';
-    grid[9][8] = 'CORRUPTED_GRID';
-
-    grid[3][8] = 'LOW_COVER';
-    grid[13][8] = 'LOW_COVER';
+    const enemies: EnemyNPC[] = [
+      {
+        id: 'agent-hunter-prime',
+        type: 'AGENT_HUNTER',
+        x: 0,
+        y: 1,
+        band: 'STREET',
+        direction: 'RIGHT',
+        facing: 'RIGHT',
+        state: 'HUNT',
+        visionRange: 14,
+        visionAngle: 120,
+        stunTurns: 0,
+      },
+      {
+        id: 'citadel-core-turret',
+        type: 'TURRET',
+        x: 21,
+        y: 2,
+        band: 'ALLEY',
+        direction: 'DOWN',
+        facing: 'RIGHT',
+        turretAngle: -35,
+        turretSweepDir: 1,
+        state: 'PATROL',
+        visionRange: 7.5,
+        visionAngle: 50,
+        stunTurns: 0,
+      },
+      {
+        id: 'citadel-aerial-scanner',
+        type: 'DRONE',
+        x: 9.5,
+        y: 1,
+        band: 'STREET',
+        direction: 'RIGHT',
+        facing: 'RIGHT',
+        minX: 8,
+        maxX: 12,
+        state: 'PATROL',
+        visionRange: 4.5,
+        visionAngle: 80,
+        stunTurns: 0,
+      },
+      {
+        id: 'citadel-matrix-enforcer',
+        type: 'POLICE',
+        x: 13,
+        y: 0,
+        band: 'ROOFTOP',
+        direction: 'LEFT',
+        facing: 'LEFT',
+        minX: 7,
+        maxX: 17,
+        state: 'PATROL',
+        visionRange: 5,
+        visionAngle: 60,
+        stunTurns: 0,
+      }
+    ];
 
     const gates: SecurityGate[] = [
       {
-        id: 'gate-5-master',
-        x: 8,
-        y: 11,
+        id: 'master-firewall-gate',
+        x: 17,
+        y: 1,
+        band: 'STREET',
         requiredPass: 'MASTER_PASS',
         isUnlocked: false,
-      },
+      }
     ];
 
     const passPickups: PassPickup[] = [
       {
-        id: 'pass-5-master',
-        x: 2,
-        y: 14,
+        id: 'master-override-key',
+        x: 12,
+        y: 0,
+        band: 'ROOFTOP',
         passType: 'MASTER_PASS',
         collected: false,
-      },
-    ];
-
-    const enemies: EnemyNPC[] = [
-      {
-        id: 'hunter-5-boss',
-        type: 'AGENT_HUNTER',
-        x: 8,
-        y: 8,
-        direction: 'DOWN',
-        state: 'PATROL',
-        visionRange: 5,
-        visionAngle: 90,
-        stunTurns: 0,
-        patrolPath: [
-          { x: 8, y: 7 },
-          { x: 9, y: 8 },
-          { x: 8, y: 9 },
-          { x: 7, y: 8 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
-      },
-      {
-        id: 'police-5-1',
-        type: 'POLICE',
-        x: 2,
-        y: 4,
-        direction: 'RIGHT',
-        state: 'PATROL',
-        visionRange: 4,
-        visionAngle: 90,
-        stunTurns: 0,
-        patrolPath: [
-          { x: 2, y: 4 },
-          { x: 4, y: 4 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
-      },
-      {
-        id: 'police-5-2',
-        type: 'POLICE',
-        x: 13,
-        y: 5,
-        direction: 'DOWN',
-        state: 'PATROL',
-        visionRange: 4,
-        visionAngle: 90,
-        stunTurns: 0,
-        patrolPath: [
-          { x: 13, y: 5 },
-          { x: 13, y: 9 },
-        ],
-        patrolIndex: 0,
-        patrolForward: true,
-      },
-      {
-        id: 'turret-5-1',
-        type: 'TURRET',
-        x: 13,
-        y: 13,
-        direction: 'LEFT',
-        state: 'PATROL',
-        visionRange: 5,
-        visionAngle: 90,
-        stunTurns: 0,
-      },
+      }
     ];
 
     const terminals: DataTerminal[] = [
       {
-        id: 'term-5-master',
-        x: 8,
-        y: 6,
+        id: 'matrix-core-mainframe',
+        x: 25,
+        y: 2,
+        band: 'ALLEY',
         isHacked: false,
         hackProgress: 0,
-        energyReward: 50,
-        dataPointsReward: 300,
-      },
+        energyReward: 60,
+        dataPointsReward: 200,
+      }
     ];
 
     return {
       sectorId: 5,
-      name: 'The Citadel Extraction Glitch',
+      name: 'The Citadel Glitch (Matrix Core)',
       gridSize: size,
       timeLimit: 35,
       basePoints: 500,
       tileMapJson: grid,
+      layoutJson: layout,
       enemySpawnsJson: enemies,
       gatesJson: gates,
       terminalsJson: terminals,
       passPickupsJson: passPickups,
-      extractionPointJson: { x: 15, y: 15 },
-      jevSpawnJson: { x: 0, y: 0 },
+      extractionPointJson: { x: 31, y: 1 },
+      jevSpawnJson: { x: 0.5, y: 1 },
     };
   })(),
 };

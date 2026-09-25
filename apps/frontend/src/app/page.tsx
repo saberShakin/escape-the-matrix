@@ -6,15 +6,15 @@ import {
   JevStats, 
   JevEvaluationResponse, 
   DEFAULT_JEV_STATS,
-  Position,
   BehaviorDirective 
 } from '@escape-the-matrix/shared-types';
 import { TopBar } from '@/components/hud/TopBar';
-import { GridRenderer } from '@/components/canvas/GridRenderer';
+import { SideScrollerRenderer } from '@/components/canvas/SideScrollerRenderer';
 import { TelemetryPanel } from '@/components/hud/TelemetryPanel';
 import { OperatorControls } from '@/components/hud/OperatorControls';
 import { OperatorLabModal } from '@/components/lab/OperatorLabModal';
 import { SectorDebriefModal } from '@/components/hud/SectorDebriefModal';
+import { RealtimeSimulationEngine } from '@/engine/RealtimeSimulationEngine';
 import { sound } from '@/utils/audio';
 
 export default function GamePage() {
@@ -27,15 +27,19 @@ export default function GamePage() {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [speed, setSpeed] = useState<number>(1);
   const [isLabOpen, setIsLabOpen] = useState<boolean>(false);
-  const [hoveredTile, setHoveredTile] = useState<Position | null>(null);
+  const [hoveredFeature, setHoveredFeature] = useState<string | null>(null);
   const [apiOnline, setApiOnline] = useState<boolean>(true);
 
-  const tickIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const engineRef = useRef<RealtimeSimulationEngine | null>(null);
 
   // Initialize session & first sector
   const loadSector = useCallback(async (sectorId: number) => {
     try {
+      if (engineRef.current) {
+        engineRef.current.pause();
+      }
       setIsRunning(false);
+
       const res = await fetch('/api/game/sector/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -49,11 +53,54 @@ export default function GamePage() {
         setEvaluation(null);
         setThoughtLogs([]);
         setApiOnline(true);
+
+        // Instantiate continuous 60 FPS Real-time Simulation Engine
+        engineRef.current = new RealtimeSimulationEngine(data.state, data.stats, data.runId, {
+          onEvaluation: (newEval) => {
+            setEvaluation(newEval);
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+            setThoughtLogs((prev) => [
+              {
+                text: newEval.tacticalThought,
+                time: timeStr,
+                action: newEval.recommendedAction,
+              },
+              ...prev.slice(0, 35),
+            ]);
+          },
+          onStateUpdate: (newState) => {
+            setSectorState({ ...newState });
+          },
+          onFinished: async (status, finalState) => {
+            setIsRunning(false);
+            setSectorState({ ...finalState });
+            if (status === 'SUCCESS') {
+              sound.playVictory();
+              // Award points
+              const sessRes = await fetch('/api/game/session');
+              const sessData = await sessRes.json();
+              if (sessData.success) {
+                setDataPoints((prev) => prev + 150);
+              }
+            }
+          },
+          onSoundTrigger: (s) => {
+            if (s === 'step') sound.playStep();
+            else if (s === 'jump' || s === 'land') sound.playStep();
+            else if (s === 'hack') sound.playHack();
+            else if (s === 'alert') sound.playAlert();
+            else if (s === 'emp') sound.playEmp();
+            else if (s === 'victory') sound.playVictory();
+          },
+        });
+
+        engineRef.current.setSpeed(speed);
       }
     } catch {
       setApiOnline(false);
     }
-  }, []);
+  }, [speed]);
 
   // Fetch initial session info
   useEffect(() => {
@@ -73,104 +120,41 @@ export default function GamePage() {
     fetchSession();
   }, [loadSector]);
 
-  // Execute a single simulation tick
-  const stepTick = useCallback(async () => {
-    if (!runId || !sectorState) return;
-    if (sectorState.status === 'SUCCESS' || sectorState.status.startsWith('FAILED')) {
-      setIsRunning(false);
-      return;
-    }
+  // Handle Play / Pause (Continuous 60 FPS Simulation)
+  const handleTogglePlay = () => {
+    if (!engineRef.current) return;
 
-    try {
-      const res = await fetch('/api/game/sector/tick', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId }),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        const newState: SectorState = data.state;
-        const newEval: JevEvaluationResponse = data.evaluation;
-
-        setSectorState(newState);
-        setEvaluation(newEval);
-
-        // Sound effects
-        sound.playStep();
-        if (newEval.recommendedAction === 'USE_EMP') sound.playEmp();
-        if (newState.matrixAlert > sectorState.matrixAlert + 5) sound.playAlert();
-
-        // Add to live thought logs
-        const now = new Date();
-        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-
-        setThoughtLogs((prev) => [
-          {
-            text: newEval.tacticalThought,
-            time: timeStr,
-            action: newEval.recommendedAction,
-          },
-          ...prev.slice(0, 30),
-        ]);
-
-        // Stop loop if finished
-        if (newState.status !== 'RUNNING') {
-          setIsRunning(false);
-          // Refresh session to get updated data points
-          const sessRes = await fetch('/api/game/session');
-          const sessData = await sessRes.json();
-          if (sessData.success) {
-            setDataPoints(sessData.session.dataPoints);
-          }
-        }
-      }
-    } catch {
-      setIsRunning(false);
-    }
-  }, [runId, sectorState]);
-
-  // Simulation run timer loop
-  useEffect(() => {
     if (isRunning) {
-      const delay = Math.max(250, 1000 / speed);
-      tickIntervalRef.current = setInterval(() => {
-        stepTick();
-      }, delay);
+      engineRef.current.pause();
+      setIsRunning(false);
     } else {
-      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
+      engineRef.current.start();
+      setIsRunning(true);
     }
+  };
 
-    return () => {
-      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
-    };
-  }, [isRunning, speed, stepTick]);
+  // Handle Simulation Speed Change
+  const handleSpeedChange = (newSpeed: number) => {
+    setSpeed(newSpeed);
+    engineRef.current?.setSpeed(newSpeed);
+  };
 
-  // Handle Emergency Override
-  const handleTriggerOverride = async (type: 'OVERDRIVE_EMP' | 'EMERGENCY_REROUTE') => {
-    if (!runId) return;
-    try {
-      const res = await fetch('/api/game/sector/override', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId, overrideType: type }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSectorState(data.state);
-        if (type === 'OVERDRIVE_EMP') sound.playEmp();
-        const now = new Date();
-        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-        setThoughtLogs((prev) => [
-          {
-            text: `[OPERATOR MANUAL OVERRIDE]: ${data.message}`,
-            time: timeStr,
-            action: type,
-          },
-          ...prev,
-        ]);
-      }
-    } catch {}
+  // Handle Emergency Overrides
+  const handleTriggerOverride = (type: 'OVERDRIVE_EMP' | 'EMERGENCY_REROUTE') => {
+    if (!engineRef.current) return;
+    const result = engineRef.current.triggerOverride(type);
+    if (result.success) {
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+      setThoughtLogs((prev) => [
+        {
+          text: `[OPERATOR MANUAL OVERRIDE]: ${result.message}`,
+          time: timeStr,
+          action: type,
+        },
+        ...prev,
+      ]);
+    }
   };
 
   // Handle Stat Upgrade in Lab
@@ -186,6 +170,7 @@ export default function GamePage() {
         setStats(data.stats);
         setDataPoints(data.dataPoints);
         sound.playHack();
+        if (sectorState) loadSector(sectorState.sectorId);
       }
     } catch {}
   };
@@ -201,6 +186,7 @@ export default function GamePage() {
       const data = await res.json();
       if (data.success) {
         setStats(data.stats);
+        if (sectorState) loadSector(sectorState.sectorId);
       }
     } catch {}
   };
@@ -223,40 +209,41 @@ export default function GamePage() {
           </div>
         )}
 
-        {/* Viewport Grid & Telemetry layout */}
+        {/* Viewport & Telemetry layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start flex-1">
-          {/* Left Canvas Viewport (8 Cols) */}
+          {/* Left Side-Scroller Viewport (8 Cols) */}
           <div className="lg:col-span-8 flex flex-col gap-3">
-            <GridRenderer
+            <SideScrollerRenderer
               state={sectorState}
-              onTileHover={(pos) => setHoveredTile(pos)}
+              onFeatureHover={(info) => setHoveredFeature(info)}
             />
 
-            {/* Hovered Tile Inspection Readout */}
+            {/* Hovered Feature Inspection Readout */}
             <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-matrix-surface/60 border border-matrix-border text-[11px] font-mono text-slate-400">
               <div className="flex items-center space-x-2">
                 <span>INSPECTOR:</span>
-                <span className="text-matrix-cyan">
-                  {hoveredTile
-                    ? `GRID [${hoveredTile.x}, ${hoveredTile.y}] - ${
-                        sectorState?.tiles[hoveredTile.y]?.[hoveredTile.x] || 'EMPTY'
-                      }`
-                    : 'HOVER OVER GRID TILE TO INSPECT'}
+                <span className="text-matrix-cyan font-bold">
+                  {hoveredFeature
+                    ? hoveredFeature
+                    : 'HOVER OVER PLATFORMS, LADDERS, RAMPS OR HAZARDS TO INSPECT'}
                 </span>
               </div>
               <div className="text-slate-500">
-                AI EVAL ENGINE: <span className="text-matrix-green">typesafe-ai/jev</span>
+                AI ENGINE:{' '}
+                <span className="text-matrix-green font-bold">
+                  {evaluation?.metrics?.model || 'typesafe-ai/jev (realtime-engine)'}
+                </span>
               </div>
             </div>
 
             {/* Bottom Operator Controls */}
             <OperatorControls
               isRunning={isRunning}
-              onTogglePlay={() => setIsRunning(!isRunning)}
-              onStepTick={stepTick}
+              onTogglePlay={handleTogglePlay}
+              onStepTick={() => {}} // Disabled in continuous 60fps mode
               onReset={() => sectorState && loadSector(sectorState.sectorId)}
               speed={speed}
-              onSpeedChange={(s) => setSpeed(s)}
+              onSpeedChange={handleSpeedChange}
               energy={sectorState?.jev.energy ?? 100}
               onTriggerOverride={handleTriggerOverride}
             />
