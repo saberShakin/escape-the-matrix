@@ -1,4 +1,4 @@
-import { Position, TileType, EnemyNPC, SecurityGate, DataTerminal, PassPickup } from './game';
+import { Position, TileType, EnemyNPC, SecurityGate, DataTerminal, PassPickup, SectorSideScrollerLayout } from './game';
 import { BehaviorDirective } from './stats';
 
 /**
@@ -37,6 +37,7 @@ export interface SectorDefinitionEntity {
   timeLimit: number;
   basePoints: number;
   tileMapJson: TileType[][];
+  layoutJson?: SectorSideScrollerLayout;
   enemySpawnsJson: EnemyNPC[];
   gatesJson: SecurityGate[];
   terminalsJson: DataTerminal[];
@@ -44,6 +45,7 @@ export interface SectorDefinitionEntity {
   extractionPointJson: Position;
   jevSpawnJson: Position;
 }
+
 
 /**
  * DB Table Model: sector_runs

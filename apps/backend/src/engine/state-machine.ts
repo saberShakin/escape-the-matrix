@@ -5,14 +5,11 @@ import {
   JevEvaluationResponse, 
   Direction,
   Position,
-  EnemyNPC
+  EnemyNPC,
+  HeightBand
 } from '@escape-the-matrix/shared-types';
 import { SECTOR_DEFINITIONS } from '../maps/sectors.js';
-import { findPath } from './pathfinding.js';
-import { euclideanDistance } from './grid.js';
-import { calculateDetectionRisk, getEnemyVisionTiles } from './vision.js';
 import { evaluateJevState } from '../services/jev/evaluator.js';
-import { sessionStore } from '../services/game/session-store.js';
 
 export function initSectorState(sectorId: number, stats: JevStats): SectorState {
   const def = SECTOR_DEFINITIONS[sectorId] || SECTOR_DEFINITIONS[1];
@@ -22,8 +19,10 @@ export function initSectorState(sectorId: number, stats: JevStats): SectorState 
 
   const jev = {
     id: 'jev-agent',
-    x: def.jevSpawnJson.x,
-    y: def.jevSpawnJson.y,
+    x: def.jevSpawnJson.x || 0.5,
+    y: 1, // 0 = rooftop, 1 = street, 2 = alley
+    band: 'STREET' as HeightBand,
+    facing: 'RIGHT' as const,
     direction: 'RIGHT' as Direction,
     hp: maxHp,
     maxHp,
@@ -33,13 +32,18 @@ export function initSectorState(sectorId: number, stats: JevStats): SectorState 
     keycards: [],
     noiseRadius: Math.max(1, 4 - Math.floor(stats.stealthMatrix / 3)),
     consecutiveAlertTurns: 0,
+    targetFocus: 'EXTRACTION_DOOR',
+    jumpProgress: 0,
+    climbProgress: 0,
+    rampProgress: 0,
   };
 
-  // Deep clone tiles, enemies, gates, terminals, pass pickups
-  const tiles = def.tileMapJson.map((row) => [...row]);
+  // Clone enemies, gates, terminals, pass pickups
   const enemies: EnemyNPC[] = def.enemySpawnsJson.map((e) => ({
     ...e,
-    patrolPath: e.patrolPath ? [...e.patrolPath] : undefined,
+    facing: e.facing || 'RIGHT',
+    turretAngle: e.turretAngle !== undefined ? e.turretAngle : -20,
+    turretSweepDir: e.turretSweepDir || 1,
   }));
   const gates = def.gatesJson.map((g) => ({ ...g }));
   const terminals = def.terminalsJson.map((t) => ({ ...t }));
@@ -53,23 +57,27 @@ export function initSectorState(sectorId: number, stats: JevStats): SectorState 
   return {
     sectorId: def.sectorId,
     name: def.name,
+    theme: def.layoutJson?.theme || 'SLUMS',
+    weather: def.layoutJson?.weather || 'NONE',
     gridSize: def.gridSize,
     timeLimit: def.timeLimit,
     timeRemaining: def.timeLimit,
     matrixAlert: 0,
     isLockdown: false,
-    tiles,
+    tiles: def.tileMapJson,
+    layout: def.layoutJson,
     jev,
     enemies,
     gates,
     terminals,
     passPickups,
-    extractionPoint: { ...def.extractionPointJson },
+    extractionPoint: { ...def.extractionPointJson, band: 'STREET' },
     status: 'NOT_STARTED',
     ticksElapsed: 0,
     visibleTiles,
   };
 }
+
 
 export async function tickSimulation(
   state: SectorState,
@@ -83,6 +91,7 @@ export async function tickSimulation(
         detectionRisk: 0,
         recommendedAction: 'WAIT',
         tacticalThought: `Sector simulation ended with status: ${state.status}`,
+        targetFocus: 'EXTRACTION_DOOR',
       },
     };
   }
@@ -90,7 +99,7 @@ export async function tickSimulation(
   state.status = 'RUNNING';
   state.ticksElapsed += 1;
 
-  // 1. Time decrement (1s per tick)
+  // 1. Time decrement
   state.timeRemaining = Math.max(0, state.timeRemaining - 1);
   if (state.timeRemaining <= 0) {
     state.status = 'FAILED_TIME';
@@ -98,7 +107,7 @@ export async function tickSimulation(
   }
 
   // 2. Passive energy recovery (boosted by energyReactor)
-  const energyGain = 1 + Math.floor(stats.energyReactor / 2);
+  const energyGain = 2 + Math.floor(stats.energyReactor / 2);
   state.jev.energy = Math.min(state.jev.maxEnergy, state.jev.energy + energyGain);
 
   // 3. Prepare AI State Snapshot
@@ -107,148 +116,197 @@ export async function tickSimulation(
     type: e.type,
     x: e.x,
     y: e.y,
+    band: e.band,
     direction: e.direction,
     state: e.state,
-    distanceToJev: euclideanDistance({ x: e.x, y: e.y }, { x: state.jev.x, y: state.jev.y }),
+    distanceToJev: Math.hypot(e.x - state.jev.x, (e.y - state.jev.y) * 2),
   }));
 
   const nearbyHazards = [
-    ...state.gates.filter((g) => !g.isUnlocked).map((g) => ({ x: g.x, y: g.y, type: 'GATE' })),
-    ...state.terminals.filter((t) => !t.isHacked).map((t) => ({ x: t.x, y: t.y, type: 'TERMINAL' })),
+    ...(state.layout?.gaps.map(g => ({ x: (g.startX + g.endX) / 2, y: 1, band: 'STREET' as HeightBand, type: 'GAP' })) || []),
+    ...(state.layout?.ladders.map(l => ({ x: l.x, y: 1, band: 'STREET' as HeightBand, type: 'LADDER' })) || []),
+    ...(state.layout?.ramps.map(r => ({ x: (r.startX + r.endX) / 2, y: 1, band: 'STREET' as HeightBand, type: r.direction === 'DOWN_TO_ALLEY' ? 'RAMP_DOWN' : 'RAMP_UP' })) || []),
+    ...state.gates.filter((g) => !g.isUnlocked).map((g) => ({ x: g.x, y: g.y, band: g.band, type: 'GATE' })),
+    ...state.terminals.filter((t) => !t.isHacked).map((t) => ({ x: t.x, y: t.y, band: t.band, type: 'TERMINAL' })),
   ];
 
   const snapshot: JevStateSnapshot = {
     sectorId: state.sectorId,
     jevPosition: { x: state.jev.x, y: state.jev.y },
+    jevBand: state.jev.band,
     jevHealth: state.jev.hp,
     jevEnergy: state.jev.energy,
-    keycards: [...state.jev.keycards],
+    keycards: state.jev.keycards,
     timeRemaining: state.timeRemaining,
     matrixAlert: state.matrixAlert,
     directives: stats.behaviorDirective,
     enemies: enemySnapshots,
     nearbyHazards,
-    targetGlitch: { ...state.extractionPoint },
+    targetGlitch: { x: state.extractionPoint.x, y: state.extractionPoint.y },
+    targetFocus: state.jev.targetFocus,
   };
 
-  // 4. Jev Evaluator reasoning
+  // 4. Query Jev Evaluator (with Token & Cost Metrics)
   const evaluation = await evaluateJevState(snapshot);
+  state.jev.targetFocus = evaluation.targetFocus;
 
-  // Log telemetry in session store
-  sessionStore.logTelemetry({
-    runId,
-    tickNumber: state.ticksElapsed,
-    detectionRisk: evaluation.detectionRisk,
-    actionExecuted: evaluation.recommendedAction,
-    tacticalThought: evaluation.tacticalThought,
-  });
+  // 5. Execute Traversal Action
+  const speedMult = 1 + (stats.processingHz - 1) * 0.08;
+  const currentAction = evaluation.recommendedAction;
 
-  // 5. Jev Action Resolution
-  let currentTarget: Position = { ...state.extractionPoint };
-
-  // Check if there is an uncollected pass we need first
-  const neededGate = state.gates.find(g => !g.isUnlocked);
-  if (neededGate) {
-    const matchingPass = state.passPickups.find(p => !p.collected && p.passType === neededGate.requiredPass);
-    if (matchingPass && !state.jev.keycards.includes(neededGate.requiredPass)) {
-      currentTarget = { x: matchingPass.x, y: matchingPass.y };
+  switch (currentAction) {
+    case 'TAKE_COVER': {
+      state.jev.status = 'HIDING_IN_COVER';
+      state.jev.isHidingInCover = true;
+      // Jev crouches safely behind cover; does not advance into the approaching patrol
+      break;
     }
-  } else if (stats.behaviorDirective === 'SCAVENGER') {
-    const unhacked = state.terminals.find(t => !t.isHacked);
-    if (unhacked) {
-      currentTarget = { x: unhacked.x, y: unhacked.y };
-    }
-  }
 
-  // Execute EMP ability if triggered
-  if (evaluation.recommendedAction === 'USE_EMP' && state.jev.energy >= 50) {
-    state.jev.energy -= 50;
-    for (const enemy of state.enemies) {
-      const dist = euclideanDistance({ x: enemy.x, y: enemy.y }, { x: state.jev.x, y: state.jev.y });
-      if (dist <= 3.5) {
-        enemy.state = 'STUNNED';
-        enemy.stunTurns = 3;
-      }
-    }
-  }
-
-  // Check for adjacent terminal hack
-  for (const term of state.terminals) {
-    if (!term.isHacked) {
-      const dist = euclideanDistance({ x: term.x, y: term.y }, { x: state.jev.x, y: state.jev.y });
-      if (dist <= 1.5) {
-        const hackPower = 50 + stats.hackBypass * 10;
-        term.hackProgress = Math.min(100, term.hackProgress + hackPower);
-        if (term.hackProgress >= 100) {
-          term.isHacked = true;
-          state.jev.energy = Math.min(state.jev.maxEnergy, state.jev.energy + term.energyReward);
+    case 'USE_EMP': {
+      if (state.jev.energy >= 40) {
+        state.jev.energy -= 40;
+        for (const enemy of state.enemies) {
+          const dist = Math.hypot(enemy.x - state.jev.x, (enemy.y - state.jev.y) * 2);
+          if (dist <= 6) {
+            enemy.state = 'STUNNED';
+            enemy.stunTurns = 3;
+            enemy.speechBubble = null;
+          }
         }
       }
+      break;
+    }
+
+
+    case 'JUMP_GAP': {
+      // Leap across gap hazard
+      state.jev.status = 'JUMPING';
+      state.jev.facing = 'RIGHT';
+      const gap = state.layout?.gaps.find(g => Math.abs(g.startX - state.jev.x) <= 2.5);
+      if (gap) {
+        state.jev.x = gap.endX + 0.6;
+      } else {
+        state.jev.x += 2.0 * speedMult;
+      }
+      break;
+    }
+
+    case 'CLIMB_LADDER': {
+      // Climb up ladder onto Rooftop
+      const ladder = state.layout?.ladders.find(l => Math.abs(l.x - state.jev.x) <= 1.8);
+      if (ladder) {
+        state.jev.status = 'CLIMBING';
+        state.jev.band = 'ROOFTOP';
+        state.jev.y = 0;
+        state.jev.x = ladder.x + 0.8;
+      } else {
+        state.jev.x += 1.0 * speedMult;
+      }
+      break;
+    }
+
+    case 'DESCEND_RAMP': {
+      // Descend into sunken Service Alley
+      const ramp = state.layout?.ramps.find(r => r.direction === 'DOWN_TO_ALLEY' && Math.abs(r.startX - state.jev.x) <= 2.2);
+      if (ramp) {
+        state.jev.status = 'DESCENDING';
+        state.jev.band = 'ALLEY';
+        state.jev.y = 2;
+        state.jev.x = ramp.endX + 0.8;
+      } else {
+        state.jev.x += 1.0 * speedMult;
+      }
+      break;
+    }
+
+    case 'ASCEND_RAMP': {
+      // Ascend back to Street Level
+      const ramp = state.layout?.ramps.find(r => r.direction === 'UP_TO_STREET' && Math.abs(r.startX - state.jev.x) <= 2.2);
+      if (ramp) {
+        state.jev.status = 'RUNNING';
+        state.jev.band = 'STREET';
+        state.jev.y = 1;
+        state.jev.x = ramp.endX + 0.8;
+      } else {
+        state.jev.x += 1.0 * speedMult;
+      }
+      break;
+    }
+
+    case 'HACK_GATE': {
+      const gate = state.gates.find(g => !g.isUnlocked && Math.abs(g.x - state.jev.x) <= 1.5 && g.band === state.jev.band);
+      if (gate) {
+        state.jev.status = 'HACKING';
+        if (state.jev.keycards.includes(gate.requiredPass)) {
+          gate.isUnlocked = true;
+          state.jev.x = gate.x + 1.0;
+        } else {
+          // Bypass hack progress
+          const bypassSpeed = 35 + (stats.hackBypass - 1) * 15;
+          if (bypassSpeed >= 50) {
+            gate.isUnlocked = true;
+            state.jev.x = gate.x + 1.0;
+          }
+        }
+      } else {
+        state.jev.x += 0.8 * speedMult;
+      }
+      break;
+    }
+
+    case 'HACK_TERMINAL': {
+      const terminal = state.terminals.find(t => !t.isHacked && Math.abs(t.x - state.jev.x) <= 2.0 && t.band === state.jev.band);
+      if (terminal) {
+        state.jev.status = 'HACKING';
+        terminal.isHacked = true;
+        state.jev.energy = Math.min(state.jev.maxEnergy, state.jev.energy + terminal.energyReward);
+      } else {
+        state.jev.x += 0.8 * speedMult;
+      }
+      break;
+    }
+
+    case 'MOVE_SPRINT': {
+      state.jev.status = 'RUNNING';
+      state.jev.facing = 'RIGHT';
+      // Check if blocked by locked gate
+      const gateAhead = state.gates.find(g => !g.isUnlocked && g.band === state.jev.band && g.x > state.jev.x && g.x - state.jev.x <= 1.2);
+      if (!gateAhead) {
+        state.jev.x += 1.4 * speedMult;
+      }
+      break;
+    }
+
+    case 'MOVE_STEALTH':
+    default: {
+      state.jev.status = 'RUNNING';
+      state.jev.facing = 'RIGHT';
+      const gateAhead = state.gates.find(g => !g.isUnlocked && g.band === state.jev.band && g.x > state.jev.x && g.x - state.jev.x <= 1.2);
+      if (!gateAhead) {
+        state.jev.x += 0.9 * speedMult;
+      }
+      break;
     }
   }
 
-  // Check for adjacent gate unlock
-  for (const gate of state.gates) {
-    if (!gate.isUnlocked) {
-      const dist = euclideanDistance({ x: gate.x, y: gate.y }, { x: state.jev.x, y: state.jev.y });
-      if (dist <= 1.5 && state.jev.keycards.includes(gate.requiredPass)) {
-        gate.isUnlocked = true;
+  // 6. Automatic Pass Keycard Collection
+  for (const pass of state.passPickups) {
+    if (!pass.collected && pass.band === state.jev.band && Math.abs(pass.x - state.jev.x) <= 1.2) {
+      pass.collected = true;
+      if (!state.jev.keycards.includes(pass.passType)) {
+        state.jev.keycards.push(pass.passType);
       }
     }
   }
 
-  // Autonomous Pathfinding & Movement
-  const path = findPath(
-    { x: state.jev.x, y: state.jev.y },
-    currentTarget,
-    state.tiles,
-    state.gates,
-    {
-      avoidVisionCones: stats.behaviorDirective !== 'SPRINT',
-      avoidHazards: stats.armorShield < 5,
-      enemies: state.enemies,
-    }
-  );
-
-  if (path.length > 0) {
-    const nextStep = path[0];
-    const dx = nextStep.x - state.jev.x;
-    const dy = nextStep.y - state.jev.y;
-
-    if (dx > 0) state.jev.direction = 'RIGHT';
-    else if (dx < 0) state.jev.direction = 'LEFT';
-    else if (dy > 0) state.jev.direction = 'DOWN';
-    else if (dy < 0) state.jev.direction = 'UP';
-
-    state.jev.x = nextStep.x;
-    state.jev.y = nextStep.y;
-    state.jev.status = evaluation.recommendedAction === 'MOVE_SPRINT' ? 'RUNNING' : 'CROUCHING';
-  } else {
-    state.jev.status = 'IDLE';
+  // If Jev was on rooftop and reaches rooftop end, climb down to street
+  if (state.jev.band === 'ROOFTOP' && state.layout && state.jev.x >= state.layout.rooftopEnd) {
+    state.jev.band = 'STREET';
+    state.jev.y = 1;
+    state.jev.status = 'DESCENDING';
   }
 
-  // Check pass pickup
-  for (const pass of state.passPickups) {
-    if (!pass.collected && pass.x === state.jev.x && pass.y === state.jev.y) {
-      pass.collected = true;
-      state.jev.keycards.push(pass.passType);
-    }
-  }
-
-  // Check corrupted tile hazard
-  const currentTile = state.tiles[state.jev.y]?.[state.jev.x];
-  if (currentTile === 'CORRUPTED_GRID') {
-    state.matrixAlert = Math.min(100, state.matrixAlert + 5);
-    // Armor Shield reduces hazard damage
-    const hazardDamage = stats.armorShield >= 5 ? 0.5 : 1;
-    state.jev.hp = Math.max(0, state.jev.hp - hazardDamage);
-    if (state.jev.hp <= 0) {
-      state.status = 'FAILED_HP';
-      state.jev.status = 'TERMINATED';
-    }
-  }
-
-  // 6. Enemies Turn
+  // 7. Enemy AI & Patrol Cycle Simulation
   for (const enemy of state.enemies) {
     if (enemy.stunTurns > 0) {
       enemy.stunTurns -= 1;
@@ -256,89 +314,152 @@ export async function tickSimulation(
       continue;
     }
 
-    if (enemy.type === 'TURRET') {
-      // Rotate 90 degrees clockwise
-      const dirs: Direction[] = ['UP', 'RIGHT', 'DOWN', 'LEFT'];
-      const currentIdx = dirs.indexOf(enemy.direction);
-      enemy.direction = dirs[(currentIdx + 1) % dirs.length];
-    } else if (enemy.type === 'AGENT_HUNTER') {
-      // A* tracking directly to Jev
-      const hunterPath = findPath(
-        { x: enemy.x, y: enemy.y },
-        { x: state.jev.x, y: state.jev.y },
-        state.tiles,
-        state.gates
-      );
-      if (hunterPath.length > 0) {
-        enemy.x = hunterPath[0].x;
-        enemy.y = hunterPath[0].y;
-      }
-    } else if (enemy.patrolPath && enemy.patrolPath.length > 1) {
-      // Standard Patrol step
-      let idx = enemy.patrolIndex ?? 0;
-      let forward = enemy.patrolForward ?? true;
+    switch (enemy.type) {
+      case 'DRONE': {
+        // Horizontal hovering patrol
+        const minX = enemy.minX || (enemy.x - 2);
+        const maxX = enemy.maxX || (enemy.x + 2);
+        const droneSpeed = 0.5;
 
-      if (forward) {
-        idx += 1;
-        if (idx >= enemy.patrolPath.length) {
-          idx = enemy.patrolPath.length - 2;
-          forward = false;
+        if (enemy.facing === 'RIGHT') {
+          enemy.x += droneSpeed;
+          if (enemy.x >= maxX) enemy.facing = 'LEFT';
+        } else {
+          enemy.x -= droneSpeed;
+          if (enemy.x <= minX) enemy.facing = 'RIGHT';
         }
-      } else {
-        idx -= 1;
-        if (idx < 0) {
-          idx = 1;
-          forward = true;
-        }
+        break;
       }
 
-      enemy.patrolIndex = idx;
-      enemy.patrolForward = forward;
-      const nextPos = enemy.patrolPath[idx];
-      if (nextPos) {
-        const dx = nextPos.x - enemy.x;
-        const dy = nextPos.y - enemy.y;
-        if (dx > 0) enemy.direction = 'RIGHT';
-        else if (dx < 0) enemy.direction = 'LEFT';
-        else if (dy > 0) enemy.direction = 'DOWN';
-        else if (dy < 0) enemy.direction = 'UP';
+      case 'POLICE': {
+        // Horizontal street or rooftop walking patrol
+        const minX = enemy.minX || (enemy.x - 3);
+        const maxX = enemy.maxX || (enemy.x + 3);
+        const patrolSpeed = 0.4;
 
-        enemy.x = nextPos.x;
-        enemy.y = nextPos.y;
+        if (enemy.facing === 'RIGHT') {
+          enemy.x += patrolSpeed;
+          if (enemy.x >= maxX) enemy.facing = 'LEFT';
+        } else {
+          enemy.x -= patrolSpeed;
+          if (enemy.x <= minX) enemy.facing = 'RIGHT';
+        }
+        break;
+      }
+
+      case 'TURRET': {
+        // Wall-mounted sweeping vertical arc
+        const sweepSpeed = 4;
+        const currentAngle = enemy.turretAngle || 0;
+        const sweepDir = enemy.turretSweepDir || 1;
+
+        let nextAngle = currentAngle + sweepDir * sweepSpeed;
+        if (nextAngle >= 40) {
+          nextAngle = 40;
+          enemy.turretSweepDir = -1;
+        } else if (nextAngle <= -40) {
+          nextAngle = -40;
+          enemy.turretSweepDir = 1;
+        }
+        enemy.turretAngle = nextAngle;
+        break;
+      }
+
+      case 'AGENT_HUNTER': {
+        // Relentless A* style pursuit along X
+        const hunterSpeed = 1.1;
+        if (enemy.x < state.jev.x) {
+          enemy.x += hunterSpeed;
+          enemy.facing = 'RIGHT';
+        } else {
+          enemy.x -= hunterSpeed;
+          enemy.facing = 'LEFT';
+        }
+        enemy.band = state.jev.band;
+        enemy.y = state.jev.y;
+        break;
       }
     }
   }
 
-  // 7. Recalculate Detection Risk & Matrix Alert
-  const detectionRisk = calculateDetectionRisk(state.jev, state.enemies, state.tiles, state.gates);
-  if (detectionRisk > 0.4) {
-    const alertIncrease = Math.max(3, Math.round(detectionRisk * 15 * (1 - stats.stealthMatrix * 0.05)));
-    state.matrixAlert = Math.min(100, state.matrixAlert + alertIncrease);
+  // 8. Detection & Alert Recalculation
+  let spottedThisTick = false;
+  if (!state.jev.isHidingInCover) {
+    for (const enemy of state.enemies) {
+      if (enemy.stunTurns > 0) continue;
+
+      if (enemy.type === 'DRONE') {
+        if (Math.abs(enemy.x - state.jev.x) <= 2.2) {
+          spottedThisTick = true;
+          enemy.speechBubble = '!';
+        } else {
+          enemy.speechBubble = enemy.speechBubble === '!' ? '?' : null;
+        }
+      } else if (enemy.type === 'TURRET') {
+        if (state.jev.band === 'ALLEY' && Math.abs(enemy.x - state.jev.x) <= 4.0) {
+          spottedThisTick = true;
+          enemy.speechBubble = '!';
+        } else {
+          enemy.speechBubble = null;
+        }
+      } else if (enemy.type === 'POLICE') {
+        if (enemy.band === state.jev.band) {
+          const inFront = enemy.facing === 'RIGHT' ? (state.jev.x >= enemy.x && state.jev.x - enemy.x <= enemy.visionRange) : (state.jev.x <= enemy.x && enemy.x - state.jev.x <= enemy.visionRange);
+          if (inFront) {
+            spottedThisTick = true;
+            enemy.speechBubble = '!';
+          } else {
+            enemy.speechBubble = enemy.speechBubble === '!' ? '?' : null;
+          }
+        }
+      } else if (enemy.type === 'AGENT_HUNTER') {
+        if (Math.abs(enemy.x - state.jev.x) <= 5.0) {
+          spottedThisTick = true;
+          enemy.speechBubble = '!';
+        }
+      }
+    }
+  } else {
+    // When Jev is hiding in cover, enemies do not spot him
+    for (const enemy of state.enemies) {
+      if (enemy.speechBubble === '!') enemy.speechBubble = '?';
+      else enemy.speechBubble = null;
+    }
   }
 
-  // Alert Lockdown Trigger
+  if (spottedThisTick) {
+    const alertIncrease = Math.max(5, Math.round(18 * (1 - (stats.stealthMatrix - 1) * 0.07)));
+    state.matrixAlert = Math.min(100, state.matrixAlert + alertIncrease);
+  } else {
+    state.matrixAlert = Math.max(0, state.matrixAlert - 2);
+  }
+
+
+  // 9. Alert Lockdown Trigger
   if (state.matrixAlert >= 100 && !state.isLockdown) {
     state.isLockdown = true;
-    // Spawn Agent Hunter if not present
     if (!state.enemies.some(e => e.type === 'AGENT_HUNTER')) {
       state.enemies.push({
         id: 'lockdown-hunter',
         type: 'AGENT_HUNTER',
-        x: state.extractionPoint.x,
-        y: state.extractionPoint.y,
-        direction: 'LEFT',
+        x: Math.max(0, state.jev.x - 6),
+        y: state.jev.y,
+        band: state.jev.band,
+        direction: 'RIGHT',
+        facing: 'RIGHT',
         state: 'HUNT',
-        visionRange: 6,
+        visionRange: 8,
         visionAngle: 90,
         stunTurns: 0,
       });
     }
   }
 
-  // Direct enemy contact damage
+  // 10. Damage Resolution (Enemy proximity collision)
   for (const enemy of state.enemies) {
-    if (enemy.x === state.jev.x && enemy.y === state.jev.y && enemy.stunTurns === 0) {
-      state.jev.hp = Math.max(0, state.jev.hp - 1);
+    if (enemy.stunTurns === 0 && enemy.band === state.jev.band && Math.abs(enemy.x - state.jev.x) <= 0.8) {
+      const damage = Math.max(1, 1 - Math.floor(stats.armorShield / 8));
+      state.jev.hp = Math.max(0, state.jev.hp - damage);
       if (state.jev.hp <= 0) {
         state.status = 'FAILED_HP';
         state.jev.status = 'TERMINATED';
@@ -346,8 +467,8 @@ export async function tickSimulation(
     }
   }
 
-  // 8. Extraction Glitch Win Condition
-  if (state.jev.x === state.extractionPoint.x && state.jev.y === state.extractionPoint.y) {
+  // 11. Extraction Glitch Door Success Condition
+  if (state.jev.x >= state.extractionPoint.x - 0.6) {
     state.status = 'SUCCESS';
     state.jev.status = 'EXTRACTED';
   }
@@ -371,11 +492,11 @@ export function executeEmergencyOverride(
     return { success: true, message: 'Overdrive EMP Discharged! All sector hostiles stunned.' };
   } else if (overrideType === 'EMERGENCY_REROUTE') {
     if (state.jev.energy < 20) {
-      return { success: false, message: 'Insufficient energy for Emergency Reroute (Requires 20).' };
+      return { success: false, message: 'Insufficient energy for Emergency Cloak (Requires 20).' };
     }
     state.jev.energy -= 20;
-    state.matrixAlert = Math.max(0, state.matrixAlert - 25);
-    return { success: true, message: 'Emergency Cloak activated. Alert reduced by 25%.' };
+    state.matrixAlert = Math.max(0, state.matrixAlert - 30);
+    return { success: true, message: 'Emergency Cloak activated. Alert reduced by 30%.' };
   }
 
   return { success: false, message: 'Unknown override directive.' };
