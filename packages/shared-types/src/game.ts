@@ -24,13 +24,19 @@ export type SecurityPassType = 'ALPHA_PASS' | 'BETA_PASS' | 'MASTER_PASS';
 
 export type JevStatus = 
   | 'IDLE' 
+  | 'WALKING'
   | 'RUNNING' 
   | 'JUMPING'
   | 'CLIMBING'
+  | 'DESCENDING_LADDER'
   | 'DESCENDING'
+  | 'FIGHTING'
+  | 'KNOCKING_OUT'
+  | 'RESTING'
   | 'CROUCHING'
   | 'HIDING_IN_COVER'
   | 'HACKING' 
+  | 'CAUGHT_IN_NET'
   | 'EXTRACTED' 
   | 'TERMINATED';
 
@@ -63,13 +69,35 @@ export interface CoverClutter {
   type: 'CRATE' | 'BARRELS' | 'DUMPSTER' | 'SERVER_RACK' | 'DESK';
 }
 
+
+export interface HealthPickup {
+  id: string;
+  x: number;
+  band: HeightBand;
+  amount: number;
+  isCollected: boolean;
+}
+
+export interface NetTrap {
+  id: string;
+  x: number;
+  band: HeightBand;
+  remaining: number;
+}
 export interface InteractiveFeature {
   id: string;
-  type: 'STEAM_VENT' | 'AIR_DUCT' | 'HOLOGRAM' | 'SECURITY_CAMERA';
+  type: 'STEAM_VENT' | 'SMOKE_CLOUD' | 'AIR_DUCT' | 'HOLOGRAM' | 'SECURITY_CAMERA';
   x: number;
   y: number;
   band: HeightBand;
   state?: 'ACTIVE' | 'INACTIVE';
+  securityLevel?: number;
+  isHacked?: boolean;
+  minX?: number;
+  maxX?: number;
+  moveSpeed?: number;
+  moveDirection?: -1 | 1;
+  scanRange?: number;
 }
 
 export interface JevState {
@@ -81,6 +109,8 @@ export interface JevState {
   direction: Direction;
   hp: number;
   maxHp: number;
+  stamina: number;
+  maxStamina: number;
   energy: number;
   maxEnergy: number;
   status: JevStatus;
@@ -89,16 +119,25 @@ export interface JevState {
   consecutiveAlertTurns: number;
   targetFocus?: string;
   isHidingInCover?: boolean;
+  hiddenByCoverId?: string;
+  activeCombatEnemyId?: string;
+  ladderTargetId?: string;
   vx?: number;
   vy?: number;
   jumpProgress?: number;
   climbProgress?: number;
   rampProgress?: number;
+  climbTargetBand?: HeightBand;
+  climbLadderId?: string;
+  rooftopEntryX?: number;
+  hasExitedRooftop?: boolean;
+  traversalDirection?: -1 | 1;
+  hitFlash?: number;
 }
 
 export type EnemyType = 'DRONE' | 'POLICE' | 'TURRET' | 'AGENT_HUNTER';
 
-export type EnemyState = 'PATROL' | 'SUSPICIOUS' | 'HUNT' | 'STUNNED';
+export type EnemyState = 'PATROL' | 'SUSPICIOUS' | 'HUNT' | 'STUNNED' | 'HACKED';
 
 export interface EnemyNPC {
   id: string;
@@ -122,6 +161,16 @@ export interface EnemyNPC {
   turretSweepDir?: 1 | -1;
   stunTurns: number;
   suspectedTarget?: Position;
+  health?: number;
+  maxHealth?: number;
+  attackCooldown?: number;
+  combatActive?: boolean;
+  hackLevel?: number;
+  netExposure?: number;
+  netCooldown?: number;
+  netWarning?: number;
+  isKnockedOut?: boolean;
+  hitFlash?: number;
 }
 
 export interface SecurityGate {
@@ -131,6 +180,8 @@ export interface SecurityGate {
   band: HeightBand;
   requiredPass: SecurityPassType;
   isUnlocked: boolean;
+  securityLevel?: number;
+  structureType?: 'DOOR' | 'GATE';
 }
 
 export interface DataTerminal {
@@ -142,6 +193,8 @@ export interface DataTerminal {
   hackProgress: number; // 0 to 100
   energyReward: number;
   dataPointsReward: number;
+  hackTargetId?: string;
+  securityLevel?: number;
 }
 
 export interface PassPickup {
@@ -153,7 +206,7 @@ export interface PassPickup {
   collected: boolean;
 }
 
-export type SectorRunStatus = 'NOT_STARTED' | 'RUNNING' | 'SUCCESS' | 'FAILED_HP' | 'FAILED_TIME';
+export type SectorRunStatus = 'NOT_STARTED' | 'RUNNING' | 'SUCCESS' | 'FAILED_HP' | 'FAILED_NET' | 'FAILED_TIME';
 
 export interface SectorSideScrollerLayout {
   widthUnits: number; // total horizontal distance (e.g. 26 units)
@@ -164,6 +217,7 @@ export interface SectorSideScrollerLayout {
   gaps: GapHazard[];
   clutter: CoverClutter[];
   features?: InteractiveFeature[];
+  healthPickups?: HealthPickup[];
   rooftopStart: number;
   rooftopEnd: number;
   alleyStart: number;
@@ -185,6 +239,7 @@ export interface SectorState {
   layout?: SectorSideScrollerLayout;
   jev: JevState;
   enemies: EnemyNPC[];
+  nets?: NetTrap[];
   gates: SecurityGate[];
   terminals: DataTerminal[];
   passPickups: PassPickup[];

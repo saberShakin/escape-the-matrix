@@ -160,12 +160,11 @@ Stores Jev's sub-system upgrade stats allocated by the player in the Operator La
 | :--- | :--- | :--- | :--- |
 | `id` | `VARCHAR(36)` | PRIMARY KEY, UUID | Unique stat record ID |
 | `session_id` | `VARCHAR(36)` | FOREIGN KEY (`operator_sessions.id`) | Belongs to operator session |
-| `stealth_matrix` | `INTEGER` | NOT NULL, DEFAULT 1 | Noise footprint & detection delay (Level 1-10) |
-| `processing_hz` | `INTEGER` | NOT NULL, DEFAULT 1 | Movement tick velocity & speed (Level 1-10) |
-| `hack_bypass` | `INTEGER` | NOT NULL, DEFAULT 1 | Gate/terminal hacking speed (Level 1-10) |
-| `armor_shield` | `INTEGER` | NOT NULL, DEFAULT 1 | Max HP & hazard tile resistance (Level 1-10) |
-| `energy_reactor` | `INTEGER` | NOT NULL, DEFAULT 1 | Passive energy recharge rate (Level 1-10) |
-| `behavior_directive`| `VARCHAR(30)`| NOT NULL, DEFAULT `'CAUTIOUS'` | `'CAUTIOUS'`, `'SPRINT'`, `'SCAVENGER'` |
+| `health` | `INTEGER` | NOT NULL, DEFAULT 1 | Jev's maximum health (Level 1-10) |
+| `stamina` | `INTEGER` | NOT NULL, DEFAULT 1 | Jev's sprint stamina capacity (Level 1-10) |
+| `combat_power` | `INTEGER` | NOT NULL, DEFAULT 1 | Damage dealt per punch (Level 1-10) |
+| `intellect` | `INTEGER` | NOT NULL, DEFAULT 1 | Security level access and hack speed (Level 1-10) |
+| `behavior_directive`| `VARCHAR(30)`| NOT NULL, DEFAULT `'STEALTH'` | `'STEALTH'`, `'AGGRESSIVE'`, `'BALANCED'` |
 
 #### 3. Table: `sector_definitions`
 Contains static or procedural level layout data.

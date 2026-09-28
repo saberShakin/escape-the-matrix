@@ -3,14 +3,24 @@ import { Position, HeightBand } from './game';
 export type JevActionType = 
   | 'MOVE_STEALTH'
   | 'MOVE_SPRINT'
+  | 'MOVE_WALK'
+  | 'MOVE_BACKWARD'
   | 'JUMP_GAP'
   | 'CLIMB_LADDER'
+  | 'DESCEND_LADDER'
   | 'DESCEND_RAMP'
   | 'ASCEND_RAMP'
   | 'TAKE_COVER'
+  | 'HIDE'
+  | 'KNOCKOUT'
+  | 'FIGHT'
+  | 'REST'
   | 'CRAWL_DUCT'
+  | 'OPEN_DOOR'
   | 'HACK_GATE'
   | 'HACK_TERMINAL'
+  | 'HACK_DRONE'
+  | 'HACK_CAMERA'
   | 'USE_EMP'
   | 'USE_DECOY'
   | 'WAIT';
@@ -25,6 +35,8 @@ export interface JevEnemySnapshot {
   direction: string;
   state: string;
   distanceToJev: number;
+  facing?: 'LEFT' | 'RIGHT';
+  hackLevel?: number;
 }
 
 export interface JevHazardSnapshot {
@@ -32,6 +44,7 @@ export interface JevHazardSnapshot {
   y: number;
   band?: HeightBand;
   type: string;
+  securityLevel?: number;
 }
 
 export interface JevStateSnapshot {
@@ -39,6 +52,13 @@ export interface JevStateSnapshot {
   jevPosition: Position;
   jevBand?: HeightBand;
   jevHealth: number;
+  jevMaxHealth?: number;
+  jevStamina?: number;
+  jevIntellect?: number;
+  platformStart?: number;
+  platformEnd?: number;
+  rooftopEntryX?: number;
+  canUseLadders?: boolean;
   jevEnergy: number;
   keycards: string[];
   timeRemaining: number;

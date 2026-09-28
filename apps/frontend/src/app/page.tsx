@@ -25,12 +25,16 @@ export default function GamePage() {
   const [evaluation, setEvaluation] = useState<JevEvaluationResponse | null>(null);
   const [thoughtLogs, setThoughtLogs] = useState<Array<{ text: string; time: string; action: string }>>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isDebriefDismissed, setIsDebriefDismissed] = useState<boolean>(false);
   const [speed, setSpeed] = useState<number>(1);
   const [isLabOpen, setIsLabOpen] = useState<boolean>(false);
-  const [hoveredFeature, setHoveredFeature] = useState<string | null>(null);
   const [apiOnline, setApiOnline] = useState<boolean>(true);
 
   const engineRef = useRef<RealtimeSimulationEngine | null>(null);
+  const liveStateRef = useRef<SectorState | null>(null);
+  const speedRef = useRef(speed);
+  const lastHudUpdateRef = useRef(0);
+  speedRef.current = speed;
 
   // Initialize session & first sector
   const loadSector = useCallback(async (sectorId: number) => {
@@ -47,6 +51,9 @@ export default function GamePage() {
       });
       const data = await res.json();
       if (data.success) {
+        setIsDebriefDismissed(false);
+        liveStateRef.current = data.state;
+        lastHudUpdateRef.current = 0;
         setRunId(data.runId);
         setSectorState(data.state);
         setStats(data.stats);
@@ -70,18 +77,28 @@ export default function GamePage() {
             ]);
           },
           onStateUpdate: (newState) => {
-            setSectorState({ ...newState });
+            liveStateRef.current = newState;
+            const now = performance.now();
+            if (now - lastHudUpdateRef.current >= 100 || newState.status !== 'RUNNING') {
+              lastHudUpdateRef.current = now;
+              setSectorState({ ...newState });
+            }
           },
           onFinished: async (status, finalState) => {
             setIsRunning(false);
+            setIsDebriefDismissed(false);
+            liveStateRef.current = finalState;
             setSectorState({ ...finalState });
             if (status === 'SUCCESS') {
               sound.playVictory();
-              // Award points
-              const sessRes = await fetch('/api/game/session');
-              const sessData = await sessRes.json();
-              if (sessData.success) {
-                setDataPoints((prev) => prev + 150);
+              const rewardRes = await fetch('/api/game/sector/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ runId: data.runId, finalState }),
+              });
+              const rewardData = await rewardRes.json();
+              if (rewardData.success) {
+                setDataPoints(rewardData.dataPoints);
               }
             }
           },
@@ -95,12 +112,12 @@ export default function GamePage() {
           },
         });
 
-        engineRef.current.setSpeed(speed);
+        engineRef.current.setSpeed(speedRef.current);
       }
     } catch {
       setApiOnline(false);
     }
-  }, [speed]);
+  }, []);
 
   // Fetch initial session info
   useEffect(() => {
@@ -135,26 +152,9 @@ export default function GamePage() {
 
   // Handle Simulation Speed Change
   const handleSpeedChange = (newSpeed: number) => {
+    speedRef.current = newSpeed;
     setSpeed(newSpeed);
     engineRef.current?.setSpeed(newSpeed);
-  };
-
-  // Handle Emergency Overrides
-  const handleTriggerOverride = (type: 'OVERDRIVE_EMP' | 'EMERGENCY_REROUTE') => {
-    if (!engineRef.current) return;
-    const result = engineRef.current.triggerOverride(type);
-    if (result.success) {
-      const now = new Date();
-      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-      setThoughtLogs((prev) => [
-        {
-          text: `[OPERATOR MANUAL OVERRIDE]: ${result.message}`,
-          time: timeStr,
-          action: type,
-        },
-        ...prev,
-      ]);
-    }
   };
 
   // Handle Stat Upgrade in Lab
@@ -192,16 +192,17 @@ export default function GamePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-matrix-void text-slate-100 selection:bg-matrix-cyan selection:text-black">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-matrix-void text-slate-100 selection:bg-matrix-cyan selection:text-black">
       {/* Top HUD Bar */}
       <TopBar
         state={sectorState}
         dataPoints={dataPoints}
         onOpenLab={() => setIsLabOpen(true)}
+        onSelectSector={loadSector}
       />
 
       {/* Main Viewport Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 flex flex-col gap-4">
+      <main className="flex w-full min-h-0 flex-1 flex-col gap-2 p-2 sm:p-3">
         {/* Connection warning if backend offline */}
         {!apiOnline && (
           <div className="p-3 rounded-lg bg-matrix-magenta/20 border border-matrix-magenta text-matrix-magenta text-xs font-mono text-center animate-pulse">
@@ -210,31 +211,10 @@ export default function GamePage() {
         )}
 
         {/* Viewport & Telemetry layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start flex-1">
+        <div className="grid min-h-0 flex-1 grid-cols-1 items-stretch gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(320px,26vw)]">
           {/* Left Side-Scroller Viewport (8 Cols) */}
-          <div className="lg:col-span-8 flex flex-col gap-3">
-            <SideScrollerRenderer
-              state={sectorState}
-              onFeatureHover={(info) => setHoveredFeature(info)}
-            />
-
-            {/* Hovered Feature Inspection Readout */}
-            <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-matrix-surface/60 border border-matrix-border text-[11px] font-mono text-slate-400">
-              <div className="flex items-center space-x-2">
-                <span>INSPECTOR:</span>
-                <span className="text-matrix-cyan font-bold">
-                  {hoveredFeature
-                    ? hoveredFeature
-                    : 'HOVER OVER PLATFORMS, LADDERS, RAMPS OR HAZARDS TO INSPECT'}
-                </span>
-              </div>
-              <div className="text-slate-500">
-                AI ENGINE:{' '}
-                <span className="text-matrix-green font-bold">
-                  {evaluation?.metrics?.model || 'typesafe-ai/jev (realtime-engine)'}
-                </span>
-              </div>
-            </div>
+          <div className="flex min-h-0 flex-col gap-2 lg:col-span-1">
+            <SideScrollerRenderer state={sectorState} stateRef={liveStateRef} />
 
             {/* Bottom Operator Controls */}
             <OperatorControls
@@ -244,13 +224,11 @@ export default function GamePage() {
               onReset={() => sectorState && loadSector(sectorState.sectorId)}
               speed={speed}
               onSpeedChange={handleSpeedChange}
-              energy={sectorState?.jev.energy ?? 100}
-              onTriggerOverride={handleTriggerOverride}
             />
           </div>
 
           {/* Right Telemetry Stream Terminal (4 Cols) */}
-          <div className="lg:col-span-4 h-[450px] lg:h-[660px]">
+          <div className="h-[35dvh] min-h-[240px] lg:h-full lg:min-h-0">
             <TelemetryPanel
               evaluation={evaluation}
               thoughtLogs={thoughtLogs}
@@ -273,6 +251,7 @@ export default function GamePage() {
       {/* Sector Debrief (Victory / Failure) Modal */}
       <SectorDebriefModal
         state={sectorState}
+        isOpen={!isDebriefDismissed}
         onNextSector={() => {
           if (sectorState) {
             const nextId = sectorState.sectorId >= 5 ? 1 : sectorState.sectorId + 1;
@@ -285,6 +264,7 @@ export default function GamePage() {
           }
         }}
         onOpenLab={() => {
+          setIsDebriefDismissed(true);
           setIsLabOpen(true);
         }}
       />

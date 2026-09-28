@@ -2,23 +2,24 @@
 
 import React from 'react';
 import { SectorState } from '@escape-the-matrix/shared-types';
-import { Shield, Zap, Clock, AlertTriangle, Key, Cpu, Award } from 'lucide-react';
+import { Activity, Heart, Clock, AlertTriangle, Cpu, Award } from 'lucide-react';
 
 interface TopBarProps {
   state: SectorState | null;
   dataPoints: number;
   onOpenLab: () => void;
+  onSelectSector: (sectorId: number) => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ state, dataPoints, onOpenLab }) => {
+export const TopBar: React.FC<TopBarProps> = ({ state, dataPoints, onOpenLab, onSelectSector }) => {
   if (!state) return null;
 
   const isLowTime = state.timeRemaining <= 15;
   const isHighAlert = state.matrixAlert >= 75;
 
   return (
-    <header className="w-full bg-matrix-surface/90 backdrop-blur-md border-b border-matrix-border px-4 py-3 shadow-lg">
-      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+    <header className="z-10 w-full flex-shrink-0 border-b border-matrix-border bg-matrix-surface/90 px-3 py-2 shadow-lg backdrop-blur-md sm:px-4">
+      <div className="flex w-full flex-wrap items-center justify-between gap-3">
         {/* Sector Info */}
         <div className="flex items-center space-x-3">
           <div className="px-2.5 py-1 rounded bg-matrix-cyan/10 border border-matrix-cyan text-matrix-cyan text-xs font-mono font-bold tracking-wider">
@@ -33,9 +34,24 @@ export const TopBar: React.FC<TopBarProps> = ({ state, dataPoints, onOpenLab }) 
                 </span>
               )}
             </h1>
-            <p className="text-xs text-slate-400 font-mono">
-              Autonomous Infiltration Protocol
-            </p>
+          </div>
+          <div className="flex items-center gap-0.5 rounded-md border border-matrix-border bg-matrix-void p-0.5" aria-label="Select sector">
+            {Array.from({ length: 5 }, (_, index) => index + 1).map((sectorId) => (
+              <button
+                key={sectorId}
+                type="button"
+                aria-label={`Load sector ${sectorId}`}
+                aria-pressed={sectorId === state.sectorId}
+                onClick={() => onSelectSector(sectorId)}
+                className={`h-7 min-w-8 rounded px-1.5 font-mono text-[10px] font-bold transition-colors ${
+                  sectorId === state.sectorId
+                    ? 'bg-matrix-cyan text-black'
+                    : 'text-slate-400 hover:bg-matrix-panel hover:text-white'
+                }`}
+              >
+                0{sectorId}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -47,7 +63,7 @@ export const TopBar: React.FC<TopBarProps> = ({ state, dataPoints, onOpenLab }) 
             <div>
               <div className="text-[10px] text-slate-400 font-mono">LOCKDOWN TIMER</div>
               <div className={`text-base font-mono font-bold ${isLowTime ? 'text-matrix-magenta' : 'text-white'}`}>
-                {state.timeRemaining}s
+                {Math.max(0, Math.ceil(state.timeRemaining))}s
               </div>
             </div>
           </div>
@@ -67,55 +83,38 @@ export const TopBar: React.FC<TopBarProps> = ({ state, dataPoints, onOpenLab }) 
                   />
                 </div>
                 <span className={`text-xs font-mono font-bold ${isHighAlert ? 'text-matrix-magenta' : 'text-matrix-amber'}`}>
-                  {state.matrixAlert}%
+                  {Math.round(state.matrixAlert)}%
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Jev Vitals & Data Points */}
-        <div className="flex items-center space-x-5">
-          {/* Jev HP */}
-          <div className="flex items-center space-x-1.5">
-            <Shield className="w-4 h-4 text-matrix-green" />
-            <div className="flex space-x-1">
-              {Array.from({ length: state.jev.maxHp }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`w-3.5 h-3.5 rounded-sm border ${
-                    i < state.jev.hp
-                      ? 'bg-matrix-green border-matrix-green shadow-neon-green'
-                      : 'bg-transparent border-slate-700'
-                  }`}
-                />
-              ))}
+        {/* Jev Vital Bars & Data Points */}
+        <div className="flex flex-wrap items-center gap-3">
+          {[
+            { label: 'HEALTH', value: state.jev.hp, max: state.jev.maxHp, Icon: Heart, color: 'bg-matrix-magenta text-matrix-magenta' },
+            { label: 'STAMINA', value: state.jev.stamina, max: state.jev.maxStamina, Icon: Activity, color: 'bg-matrix-green text-matrix-green' },
+          ].map(({ label, value, max, Icon, color }) => (
+            <div key={label} className="flex items-center gap-1.5" aria-label={`${label} ${Math.round(value)} of ${max}`}>
+              <Icon className={`h-4 w-4 ${color.split(' ')[1]}`} />
+              <div className="w-20">
+                <div className="mb-0.5 flex justify-between text-[9px] font-mono leading-none">
+                  <span className="text-slate-400">{label}</span>
+                  <span className="text-slate-200">{Math.round(value)}</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-matrix-panel">
+                  <div className={`h-full ${color.split(' ')[0]}`} style={{ width: `${Math.max(0, Math.min(100, (value / max) * 100))}%` }} />
+                </div>
+              </div>
             </div>
-          </div>
-
-          {/* Jev Energy */}
-          <div className="flex items-center space-x-2">
-            <Zap className="w-4 h-4 text-matrix-cyan" />
-            <div className="text-xs font-mono font-bold text-matrix-cyan">
-              {state.jev.energy}/{state.jev.maxEnergy}
-            </div>
-          </div>
-
-          {/* Keycards */}
-          {state.jev.keycards.length > 0 && (
-            <div className="flex items-center space-x-1">
-              <Key className="w-4 h-4 text-matrix-amber" />
-              <span className="text-xs font-mono text-matrix-amber">
-                {state.jev.keycards.length}
-              </span>
-            </div>
-          )}
+          ))}
 
           {/* Data Points */}
           <div className="flex items-center space-x-1.5 px-3 py-1 rounded bg-matrix-panel border border-matrix-border">
             <Award className="w-4 h-4 text-matrix-amber" />
             <span className="text-xs font-mono font-bold text-matrix-amber">
-              {dataPoints} DP
+              {Math.round(dataPoints)} DP
             </span>
           </div>
 

@@ -140,7 +140,7 @@ export const GridRenderer: React.FC<GridRendererProps> = ({ state, onTileHover }
         height={720}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        className="w-full max-w-[680px] aspect-square rounded-lg cursor-crosshair bg-matrix-void"
+        className="w-full max-w-[680px] aspect-square rounded-lg cursor-default bg-matrix-void"
       />
     </div>
   );

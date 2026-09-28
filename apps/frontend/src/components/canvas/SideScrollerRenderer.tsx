@@ -9,16 +9,18 @@ import {
 
 interface SideScrollerRendererProps {
   state: SectorState | null;
-  onFeatureHover?: (info: string | null) => void;
+  stateRef: React.MutableRefObject<SectorState | null>;
 }
 
 export const SideScrollerRenderer: React.FC<SideScrollerRendererProps> = ({ 
   state, 
-  onFeatureHover 
+  stateRef
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const renderStateRef = useRef<SectorState | null>(state);
+  renderStateRef.current = stateRef.current ?? state;
 
-  // Smooth 60 FPS interpolated entity positions
+  // Smooth real-time interpolated entity positions
   const jevPosRef = useRef({ x: 0.5, y: 0, band: 'STREET', jumpArc: 0 });
   const enemiesPosRef = useRef<Map<string, { x: number; y: number; facing: 'LEFT' | 'RIGHT' }>>(new Map());
 
@@ -56,13 +58,14 @@ export const SideScrollerRenderer: React.FC<SideScrollerRendererProps> = ({
 
       ctx.clearRect(0, 0, width, height);
 
-      if (!state) {
+      const currentState = renderStateRef.current;
+      if (!currentState) {
         animFrame = requestAnimationFrame(render);
         return;
       }
 
-      const theme: SectorTheme = state.theme || 'SLUMS';
-      const totalUnits = state.layout?.widthUnits || 26;
+      const theme: SectorTheme = currentState.theme || 'SLUMS';
+      const totalUnits = currentState.layout?.widthUnits || 26;
       const unitPx = width / totalUnits;
 
       // 3 Height Bands:
@@ -92,27 +95,27 @@ export const SideScrollerRenderer: React.FC<SideScrollerRendererProps> = ({
       // ==========================================
       // 4. SERVICE ALLEY / SUB-FLOOR (Sunken Lower Path)
       // ==========================================
-      if (state.layout) {
-        drawThemedServiceAlley(ctx, theme, state.layout, alleyY, streetY, unitPx, animTime);
+      if (currentState.layout) {
+        drawThemedServiceAlley(ctx, theme, currentState.layout, alleyY, streetY, unitPx, animTime);
       }
 
       // ==========================================
       // 5. STREET LEVEL (Main Path) & GAPS / TRAFFIC
       // ==========================================
-      drawThemedStreetLevel(ctx, theme, state.layout, width, streetY, bandHeight, unitPx, animTime);
+      drawThemedStreetLevel(ctx, theme, currentState.layout, width, streetY, bandHeight, unitPx, animTime);
 
       // ==========================================
       // 6. ROOFTOP PLATFORM / SKY-BRIDGE & LADDERS
       // ==========================================
-      if (state.layout) {
-        drawThemedRooftop(ctx, theme, state.layout, rooftopY, streetY, bandHeight, unitPx, animTime);
+      if (currentState.layout) {
+        drawThemedRooftop(ctx, theme, currentState.layout, rooftopY, streetY, bandHeight, unitPx, animTime);
       }
 
       // ==========================================
       // 7. SECTOR CLUTTER (Crates, Barrels, Dumpsters, Server Racks, Desks)
       // ==========================================
-      if (state.layout) {
-        for (const item of state.layout.clutter) {
+      if (currentState.layout) {
+        for (const item of currentState.layout.clutter) {
           const px = item.x * unitPx;
           const py = item.band === 'ROOFTOP' ? rooftopY : (item.band === 'ALLEY' ? alleyY : streetY);
           drawThemedClutter(ctx, px, py, item.type, theme);
@@ -122,44 +125,57 @@ export const SideScrollerRenderer: React.FC<SideScrollerRendererProps> = ({
       // ==========================================
       // 8. INTERACTIVE FEATURES (Steam Vents, Holograms, Air Ducts)
       // ==========================================
-      if (state.layout?.features) {
-        for (const feat of state.layout.features) {
+      if (currentState.layout?.features) {
+        for (const feat of currentState.layout.features) {
           const fx = feat.x * unitPx;
           const fy = feat.band === 'ROOFTOP' ? rooftopY : (feat.band === 'ALLEY' ? alleyY : streetY);
-          drawInteractiveFeature(ctx, feat, fx, fy, animTime);
+          drawInteractiveFeature(ctx, feat, fx, fy, animTime, unitPx);
         }
       }
 
       // ==========================================
       // 9. TERMINALS, SECURITY GATES & PASS PICKUPS
       // ==========================================
-      for (const term of state.terminals) {
+      for (const term of currentState.terminals) {
         const py = term.band === 'ROOFTOP' ? rooftopY : (term.band === 'ALLEY' ? alleyY : streetY);
         drawThemedTerminal(ctx, term.x * unitPx, py, term.isHacked, animTime);
       }
 
-      for (const gate of state.gates) {
+      for (const gate of currentState.gates) {
         const py = gate.band === 'ROOFTOP' ? rooftopY : (gate.band === 'ALLEY' ? alleyY : streetY);
-        drawThemedLaserGate(ctx, gate.x * unitPx, py, gate.isUnlocked, animTime);
+        drawThemedLaserGate(ctx, gate.x * unitPx, py, gate.isUnlocked, animTime, gate.structureType ?? 'GATE');
       }
 
-      for (const pass of state.passPickups) {
+      for (const pass of currentState.passPickups) {
         if (!pass.collected) {
           const py = pass.band === 'ROOFTOP' ? rooftopY : (pass.band === 'ALLEY' ? alleyY : streetY);
           drawThemedKeycard(ctx, pass.x * unitPx, py, pass.passType, animTime);
         }
       }
 
+      for (const pickup of currentState.layout?.healthPickups ?? []) {
+        if (!pickup.isCollected) {
+          const py = pickup.band === 'ROOFTOP' ? rooftopY : (pickup.band === 'ALLEY' ? alleyY : streetY);
+          drawHealthPickup(ctx, pickup.x * unitPx, py, animTime);
+        }
+      }
+
       // ==========================================
       // 10. CYAN EXTRACTION GLITCH DOOR (Goal)
       // ==========================================
-      const extX = state.extractionPoint.x * unitPx;
-      drawThemedExtractionDoor(ctx, theme, extX, streetY, animTime);
+      const extX = currentState.extractionPoint.x * unitPx;
+      const exitY = currentState.extractionPoint.band === 'ALLEY' ? alleyY : currentState.extractionPoint.band === 'ROOFTOP' ? rooftopY : streetY;
+      drawThemedExtractionDoor(ctx, extX, exitY, animTime);
+
+      for (const net of currentState.nets ?? []) {
+        const netY = net.band === 'ROOFTOP' ? rooftopY : (net.band === 'ALLEY' ? alleyY : streetY);
+        drawDroppedNet(ctx, net.x * unitPx, netY, animTime);
+      }
 
       // ==========================================
       // 11. ENEMY ENTITIES & VISION CONES (Smooth Interpolation)
       // ==========================================
-      for (const enemy of state.enemies) {
+      for (const enemy of currentState.enemies) {
         // Smoothly interpolate enemy position
         let ePos = enemiesPosRef.current.get(enemy.id);
         if (!ePos) {
@@ -177,36 +193,41 @@ export const SideScrollerRenderer: React.FC<SideScrollerRendererProps> = ({
           drawEnemyVisionSide(ctx, enemy, ex, ey, unitPx, animTime);
         }
         drawEnemyEntitySide(ctx, enemy, ex, ey, animTime);
+        if (enemy.type === 'POLICE' && enemy.combatActive && enemy.health !== undefined && enemy.maxHealth) {
+          drawEnemyHealthBar(ctx, ex, ey - 53, enemy.health, enemy.maxHealth);
+        }
       }
 
       // ==========================================
-      // 12. JEV (Continuous 60 FPS Real-Time Engine Rendering)
+      // 12. JEV (continuous real-time rendering)
       // ==========================================
-      const jevPixelX = state.jev.x * unitPx;
+      const jevPixelX = currentState.jev.x * unitPx;
       let jevPixelY = streetY;
 
-      if (state.jev.status === 'CLIMBING' && state.jev.climbProgress !== undefined) {
-        // Climbing up ladder from street to rooftop
-        jevPixelY = streetY - state.jev.climbProgress * (streetY - rooftopY);
-      } else if (state.jev.status === 'DESCENDING' && state.jev.rampProgress !== undefined) {
+      if ((currentState.jev.status === 'CLIMBING' || currentState.jev.status === 'DESCENDING_LADDER') && currentState.jev.climbProgress !== undefined) {
+        const progress = currentState.jev.climbProgress;
+        jevPixelY = currentState.jev.climbTargetBand === 'STREET'
+          ? rooftopY + progress * (streetY - rooftopY)
+          : streetY - progress * (streetY - rooftopY);
+      } else if (currentState.jev.status === 'DESCENDING' && currentState.jev.rampProgress !== undefined) {
         // Descending ramp down into alley
-        jevPixelY = streetY + state.jev.rampProgress * (alleyY - streetY);
-      } else if (state.jev.band === 'ROOFTOP') {
+        jevPixelY = streetY + currentState.jev.rampProgress * (alleyY - streetY);
+      } else if (currentState.jev.band === 'ROOFTOP') {
         jevPixelY = rooftopY;
-      } else if (state.jev.band === 'ALLEY') {
+      } else if (currentState.jev.band === 'ALLEY') {
         jevPixelY = alleyY;
       }
 
       // Parabolic jump arc with continuous smooth physics
-      if (state.jev.status === 'JUMPING' && state.jev.jumpProgress !== undefined) {
-        const jumpArc = state.jev.jumpProgress * 34;
+      if (currentState.jev.status === 'JUMPING' && currentState.jev.jumpProgress !== undefined) {
+        const jumpArc = currentState.jev.jumpProgress * 34;
         jevPixelY -= jumpArc;
       }
 
       // Footstep sparks when running
-      if (state.jev.status === 'RUNNING' && Math.random() > 0.5) {
+      if (currentState.jev.status === 'RUNNING' && Math.random() > 0.5) {
         sparksRef.current.push({
-          x: jevPixelX - (state.jev.facing === 'RIGHT' ? 8 : -8),
+          x: jevPixelX - (currentState.jev.facing === 'RIGHT' ? 8 : -8),
           y: jevPixelY - 2,
           vx: (Math.random() - 0.5) * 2,
           vy: -Math.random() * 2 - 1,
@@ -220,15 +241,24 @@ export const SideScrollerRenderer: React.FC<SideScrollerRendererProps> = ({
         ctx, 
         jevPixelX, 
         jevPixelY, 
-        state.jev.facing, 
-        state.jev.status, 
-        state.jev.isHidingInCover || false, 
-        animTime
+        currentState.jev.facing, 
+        currentState.jev.status, 
+        currentState.jev.isHidingInCover || false, 
+        animTime,
+        currentState.jev.hitFlash ?? 0
       );
 
+      if (currentState.jev.isHidingInCover && currentState.jev.hiddenByCoverId) {
+        const cover = currentState.layout?.clutter.find(item => item.id === currentState.jev.hiddenByCoverId);
+        if (cover) {
+          const coverY = cover.band === 'ROOFTOP' ? rooftopY : (cover.band === 'ALLEY' ? alleyY : streetY);
+          drawThemedClutter(ctx, cover.x * unitPx, coverY, cover.type, theme);
+        }
+      }
+
       // Focus Reticle Lock
-      if (state.jev.targetFocus) {
-        drawTargetReticle(ctx, state.jev.targetFocus, state, unitPx, streetY, rooftopY, alleyY, animTime);
+      if (currentState.jev.targetFocus && currentState.jev.targetFocus !== 'EXTRACTION_DOOR') {
+        drawTargetReticle(ctx, currentState.jev.targetFocus, currentState, unitPx, streetY, rooftopY, alleyY, animTime);
       }
 
 
@@ -240,44 +270,7 @@ export const SideScrollerRenderer: React.FC<SideScrollerRendererProps> = ({
     return () => {
       cancelAnimationFrame(animFrame);
     };
-  }, [state]);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!state || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const totalUnits = state.layout?.widthUnits || 26;
-    const unitPx = canvas.width / totalUnits;
-    const hoveredUnitX = x / unitPx;
-
-    const streetY = canvas.height * 0.63;
-    const rooftopY = canvas.height * 0.33;
-    const alleyY = canvas.height * 0.86;
-
-    let info: string | null = null;
-
-    if (Math.abs(y - rooftopY) < 36 && state.layout && hoveredUnitX >= state.layout.rooftopStart && hoveredUnitX <= state.layout.rooftopEnd) {
-      info = `ROOFTOP / SKYWAY [x: ${hoveredUnitX.toFixed(1)}]`;
-    } else if (Math.abs(y - alleyY) < 36 && state.layout && hoveredUnitX >= state.layout.alleyStart && hoveredUnitX <= state.layout.alleyEnd) {
-      info = `LOWER SUB-FLOOR / ALLEY [x: ${hoveredUnitX.toFixed(1)}]`;
-    } else if (Math.abs(y - streetY) < 36) {
-      const gap = state.layout?.gaps.find(g => hoveredUnitX >= g.startX && hoveredUnitX <= g.endX);
-      if (gap) {
-        info = gap.isMovingTraffic ? `HOVER-TRAFFIC GAP HAZARD [x: ${gap.startX}-${gap.endX}]` : `HAZARD VOID [x: ${gap.startX}-${gap.endX}]`;
-      } else {
-        info = `MAIN STREET LEVEL [x: ${hoveredUnitX.toFixed(1)}]`;
-      }
-    }
-
-    onFeatureHover?.(info);
-  };
-
-  const handleMouseLeave = () => {
-    onFeatureHover?.(null);
-  };
+  }, []);
 
   const getThemeBadgeColor = (theme?: SectorTheme) => {
     switch (theme) {
@@ -291,12 +284,12 @@ export const SideScrollerRenderer: React.FC<SideScrollerRendererProps> = ({
   };
 
   return (
-    <div className="relative flex flex-col rounded-xl bg-matrix-surface border border-matrix-border shadow-2xl overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-matrix-border bg-matrix-surface shadow-2xl">
       {/* Top Banner Tag */}
       <div className="flex items-center justify-between px-3 py-2 bg-matrix-panel/90 border-b border-matrix-border text-[11px] font-mono">
         <div className="flex items-center space-x-2">
           <span className="w-2.5 h-2.5 rounded-full bg-matrix-cyan animate-pulse" />
-          <span className="text-matrix-cyan font-bold tracking-wider">60 FPS REALTIME SIMULATION</span>
+          <span className="text-matrix-cyan font-bold tracking-wider">REALTIME SIMULATION</span>
           <span className="text-slate-500">|</span>
           <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${getThemeBadgeColor(state?.theme)}`}>
             THEME: {state?.theme || 'SLUMS'}
@@ -308,14 +301,12 @@ export const SideScrollerRenderer: React.FC<SideScrollerRendererProps> = ({
       </div>
 
       {/* Main 2D Canvas */}
-      <div className="relative flex items-center justify-center p-2 bg-[#080C14]">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#080C14] p-2">
         <canvas
           ref={canvasRef}
           width={920}
           height={480}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          className="w-full aspect-[23/12] rounded-lg cursor-crosshair shadow-inner"
+          className="h-full max-h-full w-auto max-w-full aspect-[23/12] rounded-lg cursor-default shadow-inner"
         />
       </div>
     </div>
@@ -888,6 +879,53 @@ function drawThemedClutter(
   ctx.restore();
 }
 
+function drawHealthPickup(ctx: CanvasRenderingContext2D, x: number, y: number, time: number) {
+  const floatY = y - 22 + Math.sin(time * 5 + x) * 3;
+  ctx.save();
+  ctx.fillStyle = '#ff477e';
+  ctx.shadowColor = '#ff477e';
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.moveTo(x, floatY + 7);
+  ctx.bezierCurveTo(x - 13, floatY - 1, x - 9, floatY - 12, x, floatY - 5);
+  ctx.bezierCurveTo(x + 9, floatY - 12, x + 13, floatY - 1, x, floatY + 7);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x - 1, floatY - 5, 2, 9);
+  ctx.fillRect(x - 4, floatY - 2, 8, 2);
+  ctx.restore();
+}
+
+function drawDroppedNet(ctx: CanvasRenderingContext2D, x: number, y: number, time: number) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 61, 127, 0.9)';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#ff3d7f';
+  ctx.shadowBlur = 8;
+  for (let index = -2; index <= 2; index++) {
+    ctx.beginPath();
+    ctx.moveTo(x - 17, y - 3 + index * 4);
+    ctx.lineTo(x + 17, y - 3 + index * 4);
+    ctx.moveTo(x - 17 + index * 6, y - 12);
+    ctx.lineTo(x - 17 + index * 6, y + 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 0.75 + Math.sin(time * 9) * 0.2;
+  ctx.restore();
+}
+
+function drawEnemyHealthBar(ctx: CanvasRenderingContext2D, x: number, y: number, health: number, maxHealth: number) {
+  const width = 34;
+  const ratio = Math.max(0, Math.min(1, health / maxHealth));
+  ctx.save();
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(x - width / 2, y, width, 4);
+  ctx.fillStyle = '#ff3d7f';
+  ctx.fillRect(x - width / 2, y, width * ratio, 4);
+  ctx.restore();
+}
+
 // =========================================================================
 // 8. INTERACTIVE FEATURES (Steam Vents, Holograms, Air Ducts)
 // =========================================================================
@@ -896,7 +934,8 @@ function drawInteractiveFeature(
   feat: any, 
   x: number, 
   y: number, 
-  time: number
+  time: number,
+  unitPx: number
 ) {
   ctx.save();
 
@@ -910,6 +949,30 @@ function drawInteractiveFeature(
       ctx.arc(x, steamY, steamR, 0, Math.PI * 2);
       ctx.fill();
     }
+  } else if (feat.type === 'SMOKE_CLOUD') {
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.27)';
+    for (let i = 0; i < 5; i++) {
+      const offset = Math.sin(time * 2 + i) * 5;
+      ctx.beginPath();
+      ctx.ellipse(x + (i - 2) * 8, y - 12 + offset, 13, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (feat.type === 'SECURITY_CAMERA') {
+    const direction = feat.moveDirection ?? 1;
+    const range = (feat.scanRange ?? 4) * unitPx;
+    ctx.fillStyle = 'rgba(255, 61, 127, 0.12)';
+    ctx.beginPath();
+    ctx.moveTo(x, y - 34);
+    ctx.lineTo(x + direction * range, y + 12);
+    ctx.lineTo(x + direction * range * 0.72, y + 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#1d2635';
+    ctx.fillRect(x - 8, y - 39, 16, 8);
+    ctx.fillStyle = feat.isHacked ? '#3cf08a' : '#ff3d7f';
+    ctx.beginPath();
+    ctx.arc(x + (direction > 0 ? 4 : -4), y - 35, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   } else if (feat.type === 'HOLOGRAM') {
     // Floating corporate hologram billboard
     const holoY = y - 35 + Math.sin(time * 3) * 3;
@@ -951,8 +1014,19 @@ function drawThemedTerminal(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.restore();
 }
 
-function drawThemedLaserGate(ctx: CanvasRenderingContext2D, x: number, y: number, isUnlocked: boolean, time: number) {
+function drawThemedLaserGate(ctx: CanvasRenderingContext2D, x: number, y: number, isUnlocked: boolean, time: number, structureType: 'DOOR' | 'GATE') {
   ctx.save();
+  if (structureType === 'DOOR') {
+    ctx.fillStyle = '#293447';
+    ctx.fillRect(x - 12, y - 37, 24, 37);
+    ctx.strokeStyle = isUnlocked ? '#3cf08a' : '#ffb000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - 12, y - 37, 24, 37);
+    ctx.fillStyle = isUnlocked ? '#3cf08a' : '#ffb000';
+    ctx.fillRect(x + 5, y - 20, 3, 3);
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = '#2c3547';
   ctx.fillRect(x - 4, y - 38, 8, 38);
 
@@ -985,35 +1059,30 @@ function drawThemedKeycard(ctx: CanvasRenderingContext2D, x: number, y: number, 
 
 function drawThemedExtractionDoor(
   ctx: CanvasRenderingContext2D, 
-  theme: SectorTheme, 
   x: number, 
   y: number, 
   time: number
 ) {
   ctx.save();
-  const doorW = 30;
+  const doorW = 34;
   const doorH = 54;
+  const glow = 12 + (Math.sin(time * 2) + 1) * 3;
 
-  ctx.fillStyle = '#061722';
+  ctx.fillStyle = '#0b1720';
   ctx.fillRect(x - doorW / 2, y - doorH, doorW, doorH);
 
-  // Glowing Cyan Portal Frame
+  // Quietly pulsing exit frame
   ctx.strokeStyle = '#00F0FF';
   ctx.lineWidth = 3.5;
   ctx.shadowColor = '#00F0FF';
-  ctx.shadowBlur = 16;
+  ctx.shadowBlur = glow;
   ctx.strokeRect(x - doorW / 2, y - doorH, doorW, doorH);
-
-  // Moving scanline
-  const scanY = y - doorH + ((time * 30) % doorH);
-  ctx.fillStyle = 'rgba(0, 240, 255, 0.45)';
-  ctx.fillRect(x - doorW / 2 + 2, scanY, doorW - 4, 3);
 
   ctx.shadowBlur = 0;
   ctx.fillStyle = '#00F0FF';
-  ctx.font = 'bold 9px monospace';
+  ctx.font = 'bold 8px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('EXIT GLITCH', x, y - doorH - 8);
+  ctx.fillText('EXIT', x, y - doorH - 6);
 
   ctx.restore();
 }
@@ -1083,24 +1152,44 @@ function drawEnemyEntitySide(ctx: CanvasRenderingContext2D, enemy: any, x: numbe
   ctx.save();
   const isStunned = enemy.stunTurns > 0;
 
+  if (enemy.isKnockedOut) {
+    const headDir = enemy.facing === 'RIGHT' ? 1 : -1;
+    ctx.fillStyle = '#121824';
+    ctx.fillRect(x - 8, y - 8, 16, 6);
+    ctx.strokeStyle = '#121824';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y - 3);
+    ctx.lineTo(x - 13, y);
+    ctx.moveTo(x + 5, y - 3);
+    ctx.lineTo(x + 13, y);
+    ctx.stroke();
+    ctx.fillStyle = '#e8beac';
+    ctx.beginPath();
+    ctx.arc(x + headDir * 12, y - 4, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
   if (enemy.type === 'DRONE') {
     const hoverY = y - 36 + Math.sin(time * 6) * 3;
 
-    // Propeller spinning blur
+    // Compact square-bodied drone with side wings and rotor tips
     ctx.fillStyle = '#00F0FF';
     ctx.shadowColor = '#00F0FF';
     ctx.shadowBlur = 6;
-    const propW = 28 + Math.sin(time * 25) * 8;
-    ctx.fillRect(x - propW / 2, hoverY - 10, propW, 2);
+    const wingW = 24 + Math.sin(time * 25) * 3;
+    ctx.fillRect(x - wingW, hoverY - 3, wingW * 2, 2);
+    ctx.beginPath();
+    ctx.ellipse(x - wingW, hoverY - 3, 5, 2 + Math.abs(Math.sin(time * 24)), 0, 0, Math.PI * 2);
+    ctx.ellipse(x + wingW, hoverY - 3, 5, 2 + Math.abs(Math.sin(time * 24 + 1)), 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.shadowBlur = 0;
-
-    // Shaft & Capsule body
-    ctx.fillStyle = '#343f52';
-    ctx.fillRect(x - 1.5, hoverY - 10, 3, 4);
 
     ctx.fillStyle = isStunned ? '#556275' : '#1e2638';
     ctx.beginPath();
-    ctx.ellipse(x, hoverY, 15, 8, 0, 0, Math.PI * 2);
+    ctx.roundRect(x - 10, hoverY - 9, 20, 15, 3);
     ctx.fill();
     ctx.strokeStyle = '#00F0FF';
     ctx.lineWidth = 1.5;
@@ -1108,7 +1197,7 @@ function drawEnemyEntitySide(ctx: CanvasRenderingContext2D, enemy: any, x: numbe
 
     ctx.fillStyle = isStunned ? '#888' : '#FF2A6D';
     ctx.beginPath();
-    ctx.arc(x, hoverY + 1, 3.5, 0, Math.PI * 2);
+    ctx.arc(x, hoverY - 2, 2.5, 0, Math.PI * 2);
     ctx.fill();
   } else if (enemy.type === 'TURRET') {
     ctx.fillStyle = '#1c2230';
@@ -1162,14 +1251,18 @@ function drawEnemyEntitySide(ctx: CanvasRenderingContext2D, enemy: any, x: numbe
     ctx.lineTo(x - legPhase * 7, y);
     ctx.stroke();
 
-    ctx.fillStyle = isStunned ? '#556275' : '#FF2A6D';
+    ctx.fillStyle = enemy.hitFlash > 0 ? '#ffffff' : isStunned ? '#556275' : '#FF2A6D';
     ctx.fillRect(x - 5, y - 24, 10, 14);
 
     ctx.strokeStyle = isStunned ? '#556275' : '#FF2A6D';
     ctx.lineWidth = 3;
+    const facingDir = facingRight ? 1 : -1;
+    const punch = enemy.combatActive ? Math.max(0, Math.sin(time * 18)) : 0;
     ctx.beginPath();
     ctx.moveTo(x, y - 22);
-    ctx.lineTo(x - legPhase * 6, y - 12);
+    ctx.lineTo(x + facingDir * (5 + punch * 10), y - 19);
+    ctx.moveTo(x, y - 22);
+    ctx.lineTo(x - facingDir * 5, y - 13);
     ctx.stroke();
 
     ctx.fillStyle = '#e8beac';
@@ -1182,7 +1275,7 @@ function drawEnemyEntitySide(ctx: CanvasRenderingContext2D, enemy: any, x: numbe
   }
 
   // Speech Bubble Alert Indicator (?, !, Stun)
-  if (isStunned) {
+  if (isStunned && !enemy.isKnockedOut) {
     ctx.fillStyle = '#FFB000';
     ctx.font = 'bold 11px monospace';
     ctx.fillText('⚡STUN', x - 14, y - 44);
@@ -1202,6 +1295,13 @@ function drawEnemyEntitySide(ctx: CanvasRenderingContext2D, enemy: any, x: numbe
     ctx.fillText(enemy.speechBubble, x, y - 40);
   }
 
+  if (enemy.netWarning && enemy.netWarning > 0) {
+    ctx.fillStyle = '#ff3d7f';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('NET INCOMING', x, y - 56);
+  }
+
   ctx.restore();
 }
 
@@ -1215,7 +1315,8 @@ function drawLuminousJev(
   facing: 'LEFT' | 'RIGHT', 
   status: string, 
   isHidingInCover: boolean,
-  time: number
+  time: number,
+  hitFlash: number
 ) {
   ctx.save();
 
@@ -1223,6 +1324,7 @@ function drawLuminousJev(
   const legCycle = isMoving ? Math.sin(time * 15) : 0;
   const armCycle = -legCycle;
   const facingDir = facing === 'RIGHT' ? 1 : -1;
+  const punch = status === 'FIGHTING' ? Math.max(0, Math.sin(time * 18)) : 0;
 
   // If hiding in cover, draw translucent stealth cloak
   if (isHidingInCover) {
@@ -1230,8 +1332,8 @@ function drawLuminousJev(
   }
 
   // Radiant cyan outer aura
-  ctx.shadowColor = '#00F0FF';
-  ctx.shadowBlur = isMoving ? 14 : 8;
+  ctx.shadowColor = hitFlash > 0 ? '#ff3d7f' : '#00F0FF';
+  ctx.shadowBlur = hitFlash > 0 ? 20 : isMoving ? 14 : 8;
 
   // 1. Navy Pants / Scissoring Legs
   ctx.strokeStyle = '#0d1626';
@@ -1256,8 +1358,17 @@ function drawLuminousJev(
   ctx.lineWidth = 3.2;
   ctx.beginPath();
   ctx.moveTo(x, y - 25);
-  ctx.lineTo(x + armCycle * 8 * facingDir, y - 14);
+  ctx.lineTo(x + facingDir * (7 + punch * 11 + armCycle * 3), y - 19 - punch * 2);
+  ctx.moveTo(x - 1, y - 24);
+  ctx.lineTo(x - facingDir * (5 + punch * 3), y - 13);
   ctx.stroke();
+
+  if (status === 'FIGHTING') {
+    ctx.fillStyle = '#e8ffff';
+    ctx.beginPath();
+    ctx.arc(x + facingDir * (7 + punch * 11 + armCycle * 3), y - 19 - punch * 2, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // 4. Head
   ctx.fillStyle = '#fce2c7';

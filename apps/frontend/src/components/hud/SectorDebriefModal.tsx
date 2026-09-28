@@ -8,6 +8,7 @@ import { sound } from '../../utils/audio';
 
 interface SectorDebriefModalProps {
   state: SectorState | null;
+  isOpen: boolean;
   onNextSector: () => void;
   onRetry: () => void;
   onOpenLab: () => void;
@@ -15,18 +16,16 @@ interface SectorDebriefModalProps {
 
 export const SectorDebriefModal: React.FC<SectorDebriefModalProps> = ({
   state,
+  isOpen,
   onNextSector,
   onRetry,
   onOpenLab,
 }) => {
-  if (!state || state.status === 'NOT_STARTED' || state.status === 'RUNNING') {
-    return null;
-  }
-
-  const isSuccess = state.status === 'SUCCESS';
-  const isFinalSector = state.sectorId === 5;
+  const isSuccess = state?.status === 'SUCCESS';
+  const isFinalSector = state?.sectorId === 5;
 
   useEffect(() => {
+    if (!state || state.status === 'NOT_STARTED' || state.status === 'RUNNING') return;
     if (isSuccess) {
       sound.playVictory();
       confetti({
@@ -38,12 +37,18 @@ export const SectorDebriefModal: React.FC<SectorDebriefModalProps> = ({
     } else {
       sound.playAlert();
     }
-  }, [isSuccess]);
+  }, [isSuccess, state?.status]);
+
+  if (!isOpen || !state || state.status === 'NOT_STARTED' || state.status === 'RUNNING') {
+    return null;
+  }
 
   // Points calculation breakdown
   const basePoints = state.sectorId * 100;
-  const hpBonus = state.jev.hp * 25;
-  const timeBonus = state.timeRemaining * 5;
+  const hpRemaining = Math.round(state.jev.hp);
+  const secondsRemaining = Math.max(0, Math.round(state.timeRemaining));
+  const hpBonus = hpRemaining * 25;
+  const timeBonus = secondsRemaining * 5;
   const terminalsHacked = state.terminals.filter((t) => t.isHacked).length;
   const terminalBonus = terminalsHacked * 50;
   const totalEarned = isSuccess ? basePoints + hpBonus + timeBonus + terminalBonus : 0;
@@ -75,6 +80,8 @@ export const SectorDebriefModal: React.FC<SectorDebriefModalProps> = ({
                 : `SECTOR 0${state.sectorId} CLEARED!`
               : state.status === 'FAILED_HP'
               ? 'SIMULATION TERMINATED: INTEGRITY LOST'
+              : state.status === 'FAILED_NET'
+              ? 'SIMULATION TERMINATED: CAUGHT IN DRONE NET'
               : 'SIMULATION TERMINATED: SECTOR LOCKDOWN'}
           </h2>
           <p className="text-xs text-slate-400 mt-1">
@@ -82,6 +89,8 @@ export const SectorDebriefModal: React.FC<SectorDebriefModalProps> = ({
               ? 'Jev successfully breached the local matrix glitch portal.'
               : state.status === 'FAILED_HP'
               ? 'Hostile enforcers or corrupted grid depleted Jev\'s health.'
+              : state.status === 'FAILED_NET'
+              ? 'Jev was caught beneath a deployed drone net.'
               : 'Lockdown timer expired before reaching the extraction point.'}
           </p>
         </div>
@@ -94,11 +103,11 @@ export const SectorDebriefModal: React.FC<SectorDebriefModalProps> = ({
               <span className="font-bold text-white">+{basePoints} DP</span>
             </div>
             <div className="flex justify-between text-slate-300">
-              <span>Health Integrity Bonus ({state.jev.hp} HP):</span>
+              <span>Health Integrity Bonus ({hpRemaining} HP):</span>
               <span className="font-bold text-matrix-green">+{hpBonus} DP</span>
             </div>
             <div className="flex justify-between text-slate-300">
-              <span>Speed / Time Bonus ({state.timeRemaining}s left):</span>
+              <span>Speed / Time Bonus ({secondsRemaining}s left):</span>
               <span className="font-bold text-matrix-cyan">+{timeBonus} DP</span>
             </div>
             {terminalsHacked > 0 && (
@@ -118,7 +127,7 @@ export const SectorDebriefModal: React.FC<SectorDebriefModalProps> = ({
           <div className="p-4 rounded-xl bg-matrix-panel/60 border border-matrix-magenta/30 mb-6 text-xs text-slate-300">
             <p className="leading-relaxed">
               Recommendation: Visit the <strong className="text-matrix-cyan">Operator Lab</strong> to upgrade Jev's 
-              Stealth Matrix or Processing Speed to outmaneuver security patrols.
+              Health, stamina, or combat power to outlast security patrols.
             </p>
           </div>
         )}

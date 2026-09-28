@@ -1,21 +1,19 @@
-export type BehaviorDirective = 'CAUTIOUS' | 'SPRINT' | 'SCAVENGER';
+export type BehaviorDirective = 'STEALTH' | 'AGGRESSIVE' | 'BALANCED';
 
 export interface JevStats {
-  stealthMatrix: number; // 1 to 10
-  processingHz: number;  // 1 to 10
-  hackBypass: number;    // 1 to 10
-  armorShield: number;   // 1 to 10
-  energyReactor: number; // 1 to 10
+  health: number;
+  stamina: number;
+  combatPower: number;
+  intellect: number;
   behaviorDirective: BehaviorDirective;
 }
 
 export const DEFAULT_JEV_STATS: JevStats = {
-  stealthMatrix: 1,
-  processingHz: 1,
-  hackBypass: 1,
-  armorShield: 1,
-  energyReactor: 1,
-  behaviorDirective: 'CAUTIOUS',
+  health: 1,
+  stamina: 1,
+  combatPower: 1,
+  intellect: 1,
+  behaviorDirective: 'STEALTH',
 };
 
 export const STAT_UPGRADE_COST_BASE = 50; // Data Points per level

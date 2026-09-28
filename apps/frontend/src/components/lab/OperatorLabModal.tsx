@@ -7,7 +7,7 @@ import {
   getStatUpgradeCost, 
   STAT_MAX_LEVEL 
 } from '@escape-the-matrix/shared-types';
-import { Cpu, Eye, Activity, Key, Shield, Zap, X, Award, CheckCircle2 } from 'lucide-react';
+import { Cpu, Heart, Activity, Key, Zap, X, Award, CheckCircle2, Swords } from 'lucide-react';
 
 interface OperatorLabModalProps {
   isOpen: boolean;
@@ -36,39 +36,32 @@ export const OperatorLabModal: React.FC<OperatorLabModalProps> = ({
     color: string;
   }> = [
     {
-      key: 'stealthMatrix',
-      label: 'STEALTH MATRIX',
-      desc: 'Decreases noise footprint & slows enemy vision spot speed',
-      icon: Eye,
-      color: 'text-matrix-cyan border-matrix-cyan',
+      key: 'health',
+      label: 'HEALTH CAPACITY',
+      desc: 'Increases Jev\'s maximum health before a run ends.',
+      icon: Heart,
+      color: 'text-matrix-magenta border-matrix-magenta',
     },
     {
-      key: 'processingHz',
-      label: 'PROCESSING SPEED',
-      desc: 'Gives Jev extra action ticks and faster movement traversal',
+      key: 'stamina',
+      label: 'STAMINA CAPACITY',
+      desc: 'Increases sprint endurance and the stamina reserve.',
       icon: Activity,
       color: 'text-matrix-green border-matrix-green',
     },
     {
-      key: 'hackBypass',
-      label: 'HACK BYPASS PROTOCOL',
-      desc: 'Accelerates time required to bypass security gates and terminals',
-      icon: Key,
-      color: 'text-matrix-purple border-matrix-purple',
+      key: 'combatPower',
+      label: 'COMBAT POWER',
+      desc: 'Increases damage dealt by each punch in a direct fight.',
+      icon: Swords,
+      color: 'text-matrix-cyan border-matrix-cyan',
     },
     {
-      key: 'armorShield',
-      label: 'INTEGRITY ARMOR',
-      desc: 'Increases Max Health & grants resistance to corrupted grid tiles',
-      icon: Shield,
-      color: 'text-matrix-amber border-matrix-amber',
-    },
-    {
-      key: 'energyReactor',
-      label: 'ENERGY REACTOR',
-      desc: 'Accelerates passive energy recovery for emergency EMP abilities',
+      key: 'intellect',
+      label: 'INTELLECT',
+      desc: 'Unlocks higher security hacks and reduces hack time.',
       icon: Zap,
-      color: 'text-matrix-magenta border-matrix-magenta',
+      color: 'text-matrix-purple border-matrix-purple',
     },
   ];
 
@@ -78,19 +71,19 @@ export const OperatorLabModal: React.FC<OperatorLabModalProps> = ({
     desc: string;
   }> = [
     {
-      id: 'CAUTIOUS',
-      title: 'CAUTIOUS CRAWL',
-      desc: 'Jev sticks to alley covers, avoiding vision cones even if paths are longer.',
+      id: 'STEALTH',
+      title: 'STEALTH',
+      desc: 'Walks quietly, uses cover, and prefers knockouts from behind.',
     },
     {
-      id: 'SPRINT',
-      title: 'AGGRESSIVE SPRINT',
-      desc: 'Jev takes the shortest path to extraction, using EMPs when spotted.',
+      id: 'AGGRESSIVE',
+      title: 'AGGRESSIVE',
+      desc: 'Sprints toward the exit and takes direct fights with guards.',
     },
     {
-      id: 'SCAVENGER',
-      title: 'DATA SCAVENGER',
-      desc: 'Jev strays off path to hack extra Data Terminals for maximum upgrade points.',
+      id: 'BALANCED',
+      title: 'BALANCED',
+      desc: 'Mixes cautious movement with fights when the situation favors Jev.',
     },
   ];
 
@@ -119,7 +112,7 @@ export const OperatorLabModal: React.FC<OperatorLabModalProps> = ({
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-matrix-panel border border-matrix-border">
               <Award className="w-4 h-4 text-matrix-amber" />
-              <span className="text-sm font-bold text-matrix-amber">{dataPoints} DP</span>
+              <span className="text-sm font-bold text-matrix-amber">{Math.round(dataPoints)} DP</span>
             </div>
 
             <button

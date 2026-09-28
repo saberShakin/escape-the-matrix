@@ -36,8 +36,6 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
 
   const getActionBadgeColor = (action: string) => {
     switch (action) {
-      case 'USE_EMP':
-        return 'bg-matrix-cyan text-black font-bold animate-pulse';
       case 'JUMP_GAP':
         return 'bg-matrix-magenta text-white font-bold animate-bounce';
       case 'CLIMB_LADDER':
@@ -46,7 +44,18 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
         return 'bg-matrix-cyan/30 text-matrix-cyan border border-matrix-cyan font-bold';
       case 'MOVE_SPRINT':
         return 'bg-matrix-amber text-black font-bold';
+      case 'MOVE_BACKWARD':
+        return 'bg-matrix-amber/20 text-matrix-amber border border-matrix-amber/40';
+      case 'FIGHT':
+      case 'KNOCKOUT':
+        return 'bg-matrix-magenta text-white font-bold';
+      case 'HIDE':
+      case 'REST':
+      case 'MOVE_WALK':
+        return 'bg-matrix-green/20 text-matrix-green border border-matrix-green/40';
       case 'HACK_GATE':
+      case 'HACK_DRONE':
+      case 'HACK_CAMERA':
       case 'HACK_TERMINAL':
         return 'bg-matrix-purple text-white';
       default:
@@ -60,13 +69,17 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
       <div className="flex items-center justify-between px-3 py-2 bg-matrix-panel border-b border-matrix-border">
         <div className="flex items-center space-x-2 text-matrix-cyan">
           <Terminal className="w-4 h-4" />
-          <span className="font-bold tracking-wider">JEV_NEURAL_TELEMETRY</span>
+          <span className="font-bold tracking-wider">MODEL TELEMETRY</span>
         </div>
         <div className="flex items-center space-x-1.5 text-[11px] text-slate-400">
           <Compass className="w-3.5 h-3.5 text-matrix-cyan" />
           <span>DIRECTIVE:</span>
           <span className="text-matrix-cyan font-bold">{directive}</span>
         </div>
+      </div>
+
+      <div className="border-b border-matrix-border bg-matrix-void/70 px-3 py-2 text-[11px] font-bold text-matrix-cyan">
+        {metrics?.model || 'typesafe-ai/jev'}
       </div>
 
       {/* 2. Target Reticle Focus Bar */}
@@ -112,7 +125,7 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
           <div className="text-[10px] text-slate-400 mb-1">CURRENT ACTION</div>
           <div
             className={`inline-block px-2.5 py-1 rounded text-xs font-mono tracking-wider ${getActionBadgeColor(
-              evaluation?.recommendedAction || 'MOVE_STEALTH'
+              evaluation?.recommendedAction || 'MOVE_WALK'
             )}`}
           >
             {evaluation?.recommendedAction || 'STANDBY'}
@@ -140,7 +153,7 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
               TOKENS
             </div>
             <div className="font-bold text-slate-200 mt-0.5">
-              {metrics?.tokensIn ?? 142} / {metrics?.tokensOut ?? 36}
+              {Math.round(metrics?.tokensIn ?? 142)} / {Math.round(metrics?.tokensOut ?? 36)}
             </div>
           </div>
 
@@ -148,7 +161,7 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
           <div className="p-1.5 rounded bg-black/40 border border-matrix-border/40">
             <div className="text-slate-500 text-[9px]">TOTAL</div>
             <div className="font-bold text-matrix-cyan mt-0.5">
-              {metrics?.totalTokens ?? 178}
+              {Math.round(metrics?.totalTokens ?? 178)}
             </div>
           </div>
 
@@ -159,7 +172,7 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
               LATENCY
             </div>
             <div className="font-bold text-matrix-amber mt-0.5">
-              {metrics?.latencyMs ?? 26}ms
+              {Math.round(metrics?.latencyMs ?? 26)}ms
             </div>
           </div>
 
@@ -185,7 +198,7 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
 
         {thoughtLogs.length === 0 ? (
           <div className="text-slate-500 py-6 text-center italic">
-            Awaiting Operator dispatch. Click [UNLEASH JEV] to engage autonomous side-scroller traversal...
+            Awaiting Operator dispatch. Click [GO] to engage autonomous side-scroller traversal...
           </div>
         ) : (
           thoughtLogs.map((log, index) => (

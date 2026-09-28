@@ -12,7 +12,7 @@
 - **Root Orchestrator**: Established root `package.json` with Turborepo (`turbo.json`) and concurrent runners (`npm run dev`) managing backend and frontend cleanly on Windows.
 - **Shared Contracts (`packages/shared-types`)**:
   - `game.ts`: Entities (`JevState`, `EnemyNPC`, `SecurityGate`, `DataTerminal`, `PassPickup`), tile types, and sector states.
-  - `stats.ts`: 5 core neural sub-systems (`stealthMatrix`, `processingHz`, `hackBypass`, `armorShield`, `energyReactor`) and behavior directives (`CAUTIOUS`, `SPRINT`, `SCAVENGER`).
+  - `stats.ts`: Tunable health, stamina, combat power, and intellect with `STEALTH`, `AGGRESSIVE`, and `BALANCED` behavior directives.
   - `jev.ts`: AI evaluation request/response schemas for `typesafe-ai/jev`.
   - `db.ts`: In-memory database-ready table schemas (`operator_sessions`, `jev_stats`, `sector_definitions`, `sector_runs`, `jev_telemetry_logs`).
 

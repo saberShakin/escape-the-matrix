@@ -4,6 +4,7 @@ import {
   startSession,
   upgradeStat,
   initSector,
+  completeRealtimeSector,
   tickSector,
   emergencyOverride,
   evaluateMatrix,
@@ -19,6 +20,7 @@ router.post('/session/upgrade', upgradeStat);
 
 // Sector Simulation
 router.post('/sector/init', initSector);
+router.post('/sector/complete', completeRealtimeSector);
 router.post('/sector/tick', tickSector);
 router.post('/sector/override', emergencyOverride);
 

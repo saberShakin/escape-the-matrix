@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Play, Pause, FastForward, RotateCcw, Zap, EyeOff, StepForward } from 'lucide-react';
+import { Play, Pause, FastForward, RotateCcw, StepForward } from 'lucide-react';
 
 interface OperatorControlsProps {
   isRunning: boolean;
@@ -10,8 +10,6 @@ interface OperatorControlsProps {
   onReset: () => void;
   speed: number;
   onSpeedChange: (speed: number) => void;
-  energy: number;
-  onTriggerOverride: (type: 'OVERDRIVE_EMP' | 'EMERGENCY_REROUTE') => void;
 }
 
 export const OperatorControls: React.FC<OperatorControlsProps> = ({
@@ -21,8 +19,6 @@ export const OperatorControls: React.FC<OperatorControlsProps> = ({
   onReset,
   speed,
   onSpeedChange,
-  energy,
-  onTriggerOverride,
 }) => {
   return (
     <div className="w-full bg-matrix-surface border border-matrix-border rounded-xl p-3 shadow-xl flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
@@ -45,7 +41,7 @@ export const OperatorControls: React.FC<OperatorControlsProps> = ({
           ) : (
             <>
               <Play className="w-4 h-4 fill-current" />
-              <span>UNLEASH JEV</span>
+              <span>GO</span>
             </>
           )}
         </button>
@@ -90,33 +86,6 @@ export const OperatorControls: React.FC<OperatorControlsProps> = ({
             {s}x
           </button>
         ))}
-      </div>
-
-      {/* Emergency Overrides */}
-      <div className="flex items-center space-x-2">
-        <span className="text-[10px] text-slate-400 hidden sm:inline">EMERGENCY OVERRIDES:</span>
-        
-        {/* Overdrive EMP */}
-        <button
-          onClick={() => onTriggerOverride('OVERDRIVE_EMP')}
-          disabled={energy < 40}
-          className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-matrix-cyan/10 border border-matrix-cyan text-matrix-cyan hover:bg-matrix-cyan hover:text-black disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-neon-cyan"
-          title="Stuns all nearby hostiles (Requires 40 Energy)"
-        >
-          <Zap className="w-3.5 h-3.5" />
-          <span>OVERDRIVE EMP [40E]</span>
-        </button>
-
-        {/* Emergency Reroute / Cloak */}
-        <button
-          onClick={() => onTriggerOverride('EMERGENCY_REROUTE')}
-          disabled={energy < 20}
-          className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-matrix-purple/20 border border-matrix-purple text-matrix-purple hover:bg-matrix-purple hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-          title="Drops Matrix Alert by 25% (Requires 20 Energy)"
-        >
-          <EyeOff className="w-3.5 h-3.5" />
-          <span>CLOAK [20E]</span>
-        </button>
       </div>
     </div>
   );

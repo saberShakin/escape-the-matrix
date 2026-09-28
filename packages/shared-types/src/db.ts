@@ -1,4 +1,4 @@
-import { Position, TileType, EnemyNPC, SecurityGate, DataTerminal, PassPickup, SectorSideScrollerLayout } from './game';
+import { Position, HeightBand, TileType, EnemyNPC, SecurityGate, DataTerminal, PassPickup, SectorSideScrollerLayout } from './game';
 import { BehaviorDirective } from './stats';
 
 /**
@@ -19,11 +19,10 @@ export interface OperatorSessionEntity {
 export interface JevStatsEntity {
   id: string; // UUID
   sessionId: string;
-  stealthMatrix: number;
-  processingHz: number;
-  hackBypass: number;
-  armorShield: number;
-  energyReactor: number;
+  health: number;
+  stamina: number;
+  combatPower: number;
+  intellect: number;
   behaviorDirective: BehaviorDirective;
 }
 
@@ -42,7 +41,7 @@ export interface SectorDefinitionEntity {
   gatesJson: SecurityGate[];
   terminalsJson: DataTerminal[];
   passPickupsJson: PassPickup[];
-  extractionPointJson: Position;
+  extractionPointJson: Position & { band?: HeightBand };
   jevSpawnJson: Position;
 }
 
@@ -54,7 +53,7 @@ export interface SectorRunEntity {
   id: string; // UUID
   sessionId: string;
   sectorId: number;
-  status: 'SUCCESS' | 'FAILED_HP' | 'FAILED_TIME';
+  status: 'SUCCESS' | 'FAILED_HP' | 'FAILED_NET' | 'FAILED_TIME';
   hpRemaining: number;
   timeRemaining: number;
   terminalsHacked: number;

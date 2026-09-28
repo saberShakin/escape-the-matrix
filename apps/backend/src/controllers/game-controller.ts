@@ -6,7 +6,7 @@ import { initSectorState, tickSimulation, executeEmergencyOverride } from '../en
 import { evaluateJevState } from '../services/jev/evaluator.js';
 
 // In-memory active sector runs keyed by runId
-const activeRuns = new Map<string, { state: any; stats: JevStats; runId: string }>();
+const activeRuns = new Map<string, { state: any; stats: JevStats; runId: string; rewardAwarded: boolean }>();
 
 export const getSession = (req: Request, res: Response) => {
   const active = sessionStore.getActiveSession();
@@ -24,18 +24,17 @@ export const upgradeStat = (req: Request, res: Response) => {
   const { session, stats } = sessionStore.getActiveSession();
 
   // If changing behavior directive (free)
-  if (directive && ['CAUTIOUS', 'SPRINT', 'SCAVENGER'].includes(directive)) {
+  if (directive && ['STEALTH', 'AGGRESSIVE', 'BALANCED'].includes(directive)) {
     const updated = sessionStore.updateStats(session.id, { behaviorDirective: directive });
     return res.json({ success: true, stats: updated, dataPoints: session.dataPoints });
   }
 
   // If upgrading numeric stat
   const validKeys: (keyof Omit<JevStats, 'behaviorDirective'>)[] = [
-    'stealthMatrix',
-    'processingHz',
-    'hackBypass',
-    'armorShield',
-    'energyReactor',
+    'health',
+    'stamina',
+    'combatPower',
+    'intellect',
   ];
 
   if (!statKey || !validKeys.includes(statKey)) {
@@ -68,7 +67,7 @@ export const initSector = (req: Request, res: Response) => {
   const runId = uuidv4();
   const state = initSectorState(Number(sectorId), stats);
 
-  activeRuns.set(runId, { state, stats, runId });
+  activeRuns.set(runId, { state, stats, runId, rewardAwarded: false });
 
   res.json({
     success: true,
@@ -76,6 +75,40 @@ export const initSector = (req: Request, res: Response) => {
     state,
     stats,
   });
+};
+
+export const completeRealtimeSector = (req: Request, res: Response) => {
+  const { runId, finalState } = req.body;
+  const activeRun = activeRuns.get(runId);
+  if (!activeRun) {
+    return res.status(404).json({ success: false, error: 'Sector run not found.' });
+  }
+  if (finalState?.status !== 'SUCCESS' || finalState.sectorId !== activeRun.state.sectorId) {
+    return res.status(409).json({ success: false, error: 'Only a successful sector awards points.' });
+  }
+  activeRun.state = finalState;
+
+  const { session } = sessionStore.getActiveSession();
+  if (activeRun.rewardAwarded) {
+    return res.json({ success: true, dataPoints: session.dataPoints, pointsEarned: 0 });
+  }
+
+  const state = activeRun.state;
+  const pointsEarned = state.sectorId * 100 + Math.ceil(state.jev.hp) * 25 + Math.floor(state.timeRemaining) * 5;
+  const dataPoints = sessionStore.awardDataPoints(session.id, pointsEarned);
+  sessionStore.advanceSector(session.id, state.sectorId + 1);
+  sessionStore.recordSectorRun({
+    sessionId: session.id,
+    sectorId: state.sectorId,
+    status: 'SUCCESS',
+    hpRemaining: Math.ceil(state.jev.hp),
+    timeRemaining: Math.floor(state.timeRemaining),
+    terminalsHacked: 0,
+    dataPointsEarned: pointsEarned,
+    durationMs: Math.max(0, (state.timeLimit - state.timeRemaining) * 1000),
+  });
+  activeRun.rewardAwarded = true;
+  return res.json({ success: true, dataPoints, pointsEarned });
 };
 
 export const tickSector = async (req: Request, res: Response) => {
@@ -104,12 +137,13 @@ export const tickSector = async (req: Request, res: Response) => {
       pointsEarned = basePoints + hpBonus + timeBonus + terminalBonus;
       sessionStore.awardDataPoints(session.id, pointsEarned);
       sessionStore.advanceSector(session.id, result.state.sectorId + 1);
+      activeRun.rewardAwarded = true;
     }
 
     sessionStore.recordSectorRun({
       sessionId: session.id,
       sectorId: result.state.sectorId,
-      status: result.state.status as 'SUCCESS' | 'FAILED_HP' | 'FAILED_TIME',
+      status: result.state.status as 'SUCCESS' | 'FAILED_HP' | 'FAILED_NET' | 'FAILED_TIME',
       hpRemaining: result.state.jev.hp,
       timeRemaining: result.state.timeRemaining,
       terminalsHacked: result.state.terminals.filter((t: any) => t.isHacked).length,
